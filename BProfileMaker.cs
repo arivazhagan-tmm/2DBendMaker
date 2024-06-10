@@ -25,14 +25,34 @@ internal class BProfileMaker {
    }
 
    public BendProfile MakeBendProfile () {
-      double totalBD = 0.0;
-      List<BendLine> newBendLines = [];
-      foreach (var bl in mProfile.BendLines) {
-         var bendDeduction = bl.BendDeduction;
-         var bendOffset = totalBD + bendDeduction * 0.5;
-         var (dx, dy) = bl.Orientation is EBLOrientaion.Horizontal ? (0, bendOffset) : (-bendOffset, 0.0);
-         newBendLines.Add (bl.Translated (dx, dy));
-         totalBD += bendDeduction;
+      if (mAlgorithm is EBDAlgorithm.PartialPreserve) {
+         double totalBD = 0.0;
+         List<BendLine> newBendLines = [];
+         foreach (var bl in mProfile.BendLines) {
+            var bendDeduction = bl.BendDeduction;
+            var bendOffset = totalBD + bendDeduction * 0.5;
+            var (dx, dy) = bl.Orientation is EBLOrientation.Horizontal ? (0, bendOffset) : (-bendOffset, 0.0);
+            newBendLines.Add (bl.Translated (dx, dy));
+            totalBD += bendDeduction;
+         }
+      } else {
+         double totalBD = 0;
+         int bendLineCount = mProfile.BendLines.Count;
+         for (int i = bendLineCount / 2; i > 0; i--) {
+            var bl = mProfile.BendLines[i - 1];
+            var bd = bl.BendDeduction;
+            double bendOffset = totalBD + bd * 0.5;
+            var (dx, dy) = bl.Orientation is EBLOrientation.Horizontal ? (0, bendOffset) : (-bendOffset, 0.0);
+            totalBD += bd;
+         }
+         totalBD = 0;
+         for (int i = bendLineCount / 2 + 1; i <= bendLineCount; i++) {
+            var bl = mProfile.BendLines[i - 1];
+            var bd = bl.BendDeduction;
+            double bendOffset = totalBD + bd * 0.5;
+            var (dx, dy) = bl.Orientation is EBLOrientation.Horizontal ? (0, -bendOffset) : (bendOffset, 0.0);
+            totalBD += bd;
+         }
       }
       return mBendProfile;
    }
@@ -68,7 +88,7 @@ public struct BendLine {
    public BPoint StartPoint => mStartPt;
    public BPoint EndPoint => mEndPt;
    public double BendDeduction => mBendDeduction;
-   public EBLOrientaion Orientation => mOrientation;
+   public EBLOrientation Orientation => mOrientation;
    #endregion
 
    #region Methods --------------------------------------------------
@@ -85,16 +105,16 @@ public struct BendLine {
    void UpdateOrientation () {
       var theta = mStartPt.AngleTo (mEndPt);
       mOrientation = mOrientation = theta is 0.0 or 90.0 ? theta is 0.0
-                                          ? EBLOrientaion.Horizontal
-                                          : EBLOrientaion.Vertical
-                                          : EBLOrientaion.Inclined;
+                                          ? EBLOrientation.Horizontal
+                                          : EBLOrientation.Vertical
+                                          : EBLOrientation.Inclined;
    }
    #endregion
 
    #region Private Data ---------------------------------------------
    readonly double mBendDeduction;
    readonly BPoint mStartPt, mEndPt;
-   EBLOrientaion mOrientation;
+   EBLOrientation mOrientation;
    #endregion
 }
 #endregion
@@ -217,8 +237,8 @@ public readonly record struct BPoint (double X, double Y) {
 public readonly record struct BVector (double DX, double DY);
 #endregion
 
-#region Eumns -------------------------------------------------------------------------------------
-public enum EBLOrientaion { Inclined, Horizontal, Vertical }
+#region Enums -------------------------------------------------------------------------------------
+public enum EBLOrientation { Inclined, Horizontal, Vertical }
 
 public enum ECurve { Line, Arc, Spline }
 

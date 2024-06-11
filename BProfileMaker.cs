@@ -1,11 +1,7 @@
 ﻿namespace BendMaker;
 
-
 internal class BProfileMaker {
    #region Constructors ---------------------------------------------
-   public BProfileMaker (List<BendLine> bendLines) {
-      mBendLines = bendLines;
-   }
    public BProfileMaker (Profile profile, EBDAlgorithm algorithm) => (mProfile, mAlgorithm) = (profile, algorithm);
    #endregion
 
@@ -13,70 +9,80 @@ internal class BProfileMaker {
    #endregion
 
    #region Methods --------------------------------------------------
-   public List<BendLine> GetTranslatedBLines () {
-      if (mBendLines == null) return [];
-      double totalBD = 0.0;
-      List<BendLine> newBendLines = [];
-      foreach (var bl in mBendLines) {
-         var bendDeduction = bl.BendDeduction;
-         newBendLines.Add (bl.Translated (0.0, -(totalBD + bendDeduction * 0.5)));
-         totalBD += bendDeduction;
-      }
-      return newBendLines;
-   }
-
    public BendProfile MakeBendProfile () {
-      var pBound = mProfile.Bound;
-      if (mAlgorithm is EBDAlgorithm.PartialPreserve) {
-         var (totalBD, scanIncrement) = (0.0, -0.5);
-         List<BendLine> newBendLines = [];
-         //bool isSheetCut = false;
-         foreach (var bl in mProfile.BendLines) {
-            var bendDeduction = bl.BendDeduction;
-            var bendOffset = totalBD + bendDeduction * 0.5;
-            var (dx, dy) = bl.Orientation is EBLOrientation.Horizontal ? (0, bendOffset) : (-bendOffset, 0.0);
-            newBendLines.Add (bl.Translated (dx, dy));
-            totalBD += bendDeduction;
-            // Scanner bound
-            //var sBound = new Bound (new (0, pBound.MaxY), new (pBound.MaxX + 0.5, pBound.MaxY), new (pBound.MaxX + 0.5, bendDeduction), new (0, bendDeduction));
-            //while (!isSheetCut) {
-            //   if (mProfile.Vertices.Any (v => !v.IsInside (sBound))) {
-            //      var curves = mProfile.Curves.Where (c => c.StartPoint.Y > sBound.MaxY && c.StartPoint.Y < sBound.MaxY);
-            //      curves = curves.Select (c => c.Translated (0.0, bendDeduction));
-            //      isSheetCut = true;
-            //   } else {
-            //      scanIncrement += 1.0;
-            //   }
-            //}
+      var totalBD = 0.0;
+      List<BendLine> newBendLines = [];
+      List<Curve> newCurves = [];
+      if (mAlgorithm is EBDAlgorithm.PartiallyDistributed) {
+         newBendLines.AddRange (GetTranslatedBLines (mProfile.BendLines, out totalBD));
+         var centroidY = mProfile.Centroid.Y;
+         foreach (var curve in mProfile.Curves) {
+            var newCurve = curve.StartPoint.Y < centroidY && curve.EndPoint.Y < centroidY ? curve.Translated (0, totalBD)
+                                                                                          : curve;
+            var angle = curve.StartPoint.AngleTo (curve.EndPoint);
+            if (angle is 90 or 270) {
+               if (newCurve.StartPoint.Y < newCurve.EndPoint.Y) newCurve = newCurve.Trimmed (0, totalBD, 0, 0);
+               else newCurve = newCurve.Trimmed (0, 0, 0, totalBD);
+            }
+            newCurves.Add (newCurve);
          }
       } else {
-         double totalBD = 0;
-         int bendLineCount = mProfile.BendLines.Count;
-         for (int i = bendLineCount / 2; i > 0; i--) {
-            var bl = mProfile.BendLines[i - 1];
-            var bd = bl.BendDeduction;
-            double bendOffset = totalBD + bd * 0.5;
-            var (dx, dy) = bl.Orientation is EBLOrientation.Horizontal ? (0, bendOffset) : (-bendOffset, 0.0);
-            totalBD += bd;
+         var bendLines = mProfile.BendLines;
+         var count = bendLines.Count;
+         var topBLines = bendLines.Take (count / 2).Reverse ().ToList ();
+         var bottomBLines = bendLines.TakeLast (count - topBLines.Count).ToList ();
+         var tempCurves = new List<Curve> ();
+         newBendLines.AddRange (GetTranslatedBLines (bottomBLines, out totalBD));
+         foreach (var c in GetProfileCurves (mProfile, EBLLocation.Bottom)) {
+            var angle = c.StartPoint.AngleTo (c.EndPoint);
+            var (dx, dy) = angle is 0 or 180 ? (0.0, totalBD) : (-totalBD, 0);
+            if (angle is 90 or 270) {
+               var trimmed = c.StartPoint.Y < c.EndPoint.Y ? c.Trimmed (0, totalBD, 0, 0)
+                                                           : c.Trimmed (0, 0, 0, totalBD);
+               tempCurves.Add (trimmed);
+            } else
+               newCurves.Add (c.Translated (dx, dy));
          }
-         totalBD = 0;
-         for (int i = bendLineCount / 2 + 1; i <= bendLineCount; i++) {
-            var bl = mProfile.BendLines[i - 1];
-            var bd = bl.BendDeduction;
-            double bendOffset = totalBD + bd * 0.5;
-            var (dx, dy) = bl.Orientation is EBLOrientation.Horizontal ? (0, -bendOffset) : (bendOffset, 0.0);
-            totalBD += bd;
+         newBendLines.AddRange (GetTranslatedBLines (topBLines, out totalBD, isNegOff: true));
+         foreach (var c in GetProfileCurves (mProfile, EBLLocation.Top)) {
+            var angle = c.StartPoint.AngleTo (c.EndPoint);
+            var (dx, dy) = angle is 0 or 180 ? (0.0, -totalBD) : (totalBD, 0);
+            newCurves.Add (c.Translated (dx, dy));
+         }
+         foreach (var c in tempCurves) {
+            var trimmed = c.StartPoint.Y < c.EndPoint.Y ? c.Trimmed (0, 0, 0, -totalBD)
+                                                        : c.Trimmed (0, -totalBD, 0, 0);
+            newCurves.Add (trimmed);
          }
       }
+      mBendProfile = new BendProfile (mAlgorithm, newCurves, newBendLines);
       return mBendProfile;
    }
    #endregion
 
    #region Implementation -------------------------------------------
+   List<BendLine> GetTranslatedBLines (List<BendLine> blines, out double totalBD, bool isNegOff = false) {
+      var newBendLines = new List<BendLine> ();
+      var offFactor = isNegOff ? -1 : 1;
+      totalBD = 0.0;
+      foreach (var bl in blines) {
+         var (bd, orient) = (bl.BendDeduction, bl.Orientation);
+         var offset = offFactor * (totalBD + 0.5 * bd);
+         var (dx, dy) = orient is EBLOrientation.Horizontal ? (0.0, offset) : (-offset, 0.0);
+         totalBD += bd;
+         newBendLines.Add (bl.Translated (dx, dy));
+      }
+      return newBendLines;
+   }
+
+   List<Curve> GetProfileCurves (Profile pf, EBLLocation loc) {
+      var b = pf.Bound;
+      return pf.Curves.Where (c => loc is EBLLocation.Top ? c.StartPoint.Y == b.MaxY && c.EndPoint.Y == b.MaxY
+                                                          : c.StartPoint.Y == b.MinY || c.EndPoint.Y == b.MinY).ToList ();
+   }
    #endregion
 
    #region Private Data ---------------------------------------------
-   List<BendLine>? mBendLines;
    Profile mProfile;
    BendProfile mBendProfile;
    EBDAlgorithm mAlgorithm;
@@ -107,8 +113,8 @@ public struct BendLine {
 
    #region Methods --------------------------------------------------
    public BendLine Translated (double dx, double dy) {
-      var vector = new BVector (dx, dy);
-      return new (mStartPt + vector, mEndPt + vector, mBendDeduction);
+      var v = new BVector (dx, dy);
+      return new (mStartPt.Translated (v), mEndPt.Translated (v), mBendDeduction);
    }
 
    public override string ToString () => $"{mStartPt}, {mEndPt}";
@@ -135,7 +141,7 @@ public struct BendLine {
 #region struct Profile ----------------------------------------------------------------------------
 public struct Profile {
    #region Constructors ---------------------------------------------
-   public Profile (List<Curve> curves, double radius, double thickness, double kFactor) {
+   public Profile (List<Curve> curves, double radius = 0.0, double thickness = 0.0, double kFactor = 0.0) {
       (mCurves, mBendLines, mVertices) = ([], [], []);
       foreach (var c in curves) {
          bool isEmptyTag = string.IsNullOrEmpty (c.Tag);
@@ -150,6 +156,22 @@ public struct Profile {
          }
       }
       mCentroid = BendUtils.Centroid (mVertices);
+      mBound = new Bound (mVertices.ToArray ());
+   }
+
+   public Profile (List<Curve> curves, List<BendLine> bendLines) {
+      (mCurves, mBendLines, mVertices) = (curves, [], []);
+      foreach (var c in mCurves) mVertices.Add (c.StartPoint);
+      mCentroid = BendUtils.Centroid (mVertices);
+      foreach (var bl in bendLines) {
+         if (mBendLines.Any () && mBendLines.First ().StartPoint.Y < bl.StartPoint.Y)
+            mBendLines.Insert (0, bl);
+         else mBendLines.Add (bl);
+         mVertices.Add (bl.StartPoint);
+         mVertices.Add (bl.EndPoint);
+      }
+      mCentroid = BendUtils.Centroid (mVertices);
+      mBound = new Bound (mVertices.ToArray ());
    }
    #endregion
 
@@ -168,9 +190,9 @@ public struct Profile {
    #endregion
 
    #region Private Data ---------------------------------------------
-   List<Curve> mCurves;
-   List<BendLine> mBendLines;
-   List<BPoint> mVertices;
+   List<Curve>? mCurves;
+   List<BendLine>? mBendLines;
+   List<BPoint>? mVertices;
    BPoint mCentroid;
    Bound mBound;
    #endregion
@@ -183,16 +205,22 @@ public struct BendProfile {
    public BendProfile (EBDAlgorithm algorithm, List<Curve> curves, List<BendLine> bendLines) {
       mBDAlgorithm = algorithm;
       (mBendLines, mCurves) = (bendLines, curves);
+      mVertices = [];
+      mVertices.AddRange (mCurves.Select (c => c.StartPoint));
+      mVertices.AddRange (mBendLines.Select (c => c.StartPoint));
+      mVertices.AddRange (mBendLines.Select (c => c.EndPoint));
    }
    #endregion
 
    #region Properties -----------------------------------------------
    public readonly EBDAlgorithm BendDeductionAlgorithm => mBDAlgorithm;
+   public List<BPoint> Vertices => mVertices;
    #endregion
 
    #region Private Data ---------------------------------------------
    List<BendLine> mBendLines;
    List<Curve> mCurves;
+   List<BPoint> mVertices;
    EBDAlgorithm mBDAlgorithm; // Bend deduction algorithm
    #endregion
 }
@@ -201,12 +229,15 @@ public struct BendProfile {
 #region struct Curve ------------------------------------------------------------------------------
 public struct Curve {
    #region Constructors ---------------------------------------------
-   public Curve (ECurve curveType, string tag, params BPoint[] points) {
+   public Curve (ECurve curveType, string tag = null, params BPoint[] points) {
       var pts = points.ToList ();
       (mCurvePoints, mCurveType) = (pts, curveType);
       (mStartPt, mEndPt) = (points[0], points[^1]);
-      mIsClosed = pts.Count > 2 && mStartPt.Equals (mEndPt);
       mTag = tag;
+   }
+
+   public Curve (ECurve curveType, BPoint startpoint, BPoint endpoint) {
+      (mCurveType, mStartPt, mEndPt) = (curveType, startpoint, endpoint);
    }
    #endregion
 
@@ -215,16 +246,21 @@ public struct Curve {
    public readonly BPoint EndPoint => mEndPt;
    public readonly ELineType LineType => mLineType;
    public readonly ECurve CurveType => mCurveType;
-   public bool IsModified { readonly get => mIsModified; private set => mIsModified = value; }
    public string Tag => mTag ??= "";
+   public readonly Guid ID => mID;
    #endregion
 
    #region Methods --------------------------------------------------
    public Curve Translated (double dx, double dy) {
       var v = new BVector (dx, dy);
-      var pts = mCurvePoints.Select (p => p + v).ToArray ();
-      mIsModified = true;
+      var pts = mCurvePoints.Select (p => p.Translated (v)).ToArray ();
       return new (mCurveType, mTag ??= "", pts);
+   }
+
+   public Curve Trimmed (double startDx, double startDy, double endDx, double endDy) {
+      var (startPt, endPt) = (new BPoint (mStartPt.X + startDx, mStartPt.Y + startDy, mStartPt.Index),
+                              new BPoint (mEndPt.X + endDx, mEndPt.Y + endDy, mEndPt.Index));
+      return new Curve (ECurve.Line, startPt, endPt);
    }
    #endregion
 
@@ -233,18 +269,14 @@ public struct Curve {
    BPoint mStartPt, mEndPt;
    ECurve mCurveType;
    ELineType mLineType;
-   bool mIsClosed, mIsModified;
    string? mTag;
+   Guid mID;
    #endregion
 }
 #endregion
 
 #region struct BPoint -----------------------------------------------------------------------------
-public readonly record struct BPoint (double X, double Y) {
-   #region Operators ------------------------------------------------
-   public static BPoint operator + (BPoint p, BVector v) => new (p.X + v.DX, p.Y + v.DY);
-   #endregion
-
+public readonly record struct BPoint (double X, double Y, int Index = -1) {
    #region Methods --------------------------------------------------
    public double AngleTo (BPoint p) {
       var angle = Math.Round (Math.Atan2 (p.Y - Y, p.X - X) * (180 / Math.PI), 2);
@@ -253,6 +285,7 @@ public readonly record struct BPoint (double X, double Y) {
    public override string ToString () => $"({X}, {Y})";
    public bool IsEqual (BPoint p) => p.X == X && p.Y == Y;
    public bool IsInside (Bound b) => X < b.MaxX && X > b.MinX && Y < b.MaxY && Y < b.MinY;
+   public BPoint Translated (BVector v) => new (X + v.DX, Y + v.DY, Index);
    #endregion
 }
 #endregion
@@ -289,9 +322,6 @@ public struct Bound {
    public double MaxY { get; init; }
    public double Width => mWidth;
    public double Height => mHeight;
-   public BPoint Mid => mMid;
-   public BPoint BMin => new (MinX, MinY);
-   public BPoint BMax => new (MaxX, MaxY);
    #endregion
 
    #region Private Data ---------------------------------------------
@@ -308,5 +338,7 @@ public enum ECurve { Line, Arc, Spline }
 
 public enum ELineType { Solid, Dashed }
 
-public enum EBDAlgorithm { EquallyDistributed, PartialPreserve }
+public enum EBDAlgorithm { EquallyDistributed, PartiallyDistributed }
+
+public enum EBLLocation { Top, Bottom }
 #endregion

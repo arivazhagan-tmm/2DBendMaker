@@ -6,7 +6,8 @@
         xmlns:local="clr-namespace:BendMaker"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
-    <Grid>
-
-    </Grid>
+    <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top">
+        <Button Width="100" Height="32" Content="Import" FontWeight="Bold" FontSize="18" Click="OnImport_Click"/>
+        <Button Width="100" Height="32" Content="Export" FontWeight="Bold" FontSize="18" Click="OnExport_Click"/>
+    </StackPanel>
 </Window>

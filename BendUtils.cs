@@ -19,7 +19,9 @@ static public class BendUtils {
    public static BPoint Centroid (this List<BPoint> points) {
       var (xCords, yCords) = (points.Select (p => p.X), points.Select (p => p.Y));
       var (minX, minY, maxX, maxY) = (xCords.Min (), yCords.Min (), xCords.Max (), yCords.Max ());
-      return new ((minX + maxX) * 0.5, (minY + maxY) * 0.5);
+      return new ((minX + maxX) * 0.5, (minY + maxY) * 0.5, -1);
    }
+
+   
 }
 

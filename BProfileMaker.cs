@@ -1,5 +1,6 @@
-﻿
-namespace BendMaker;
+﻿namespace BendMaker;
+
+
 internal class BProfileMaker {
    #region Constructors ---------------------------------------------
    public BProfileMaker (List<BendLine> bendLines) {
@@ -25,15 +26,28 @@ internal class BProfileMaker {
    }
 
    public BendProfile MakeBendProfile () {
+      var pBound = mProfile.Bound;
       if (mAlgorithm is EBDAlgorithm.PartialPreserve) {
-         double totalBD = 0.0;
+         var (totalBD, scanIncrement) = (0.0, -0.5);
          List<BendLine> newBendLines = [];
+         //bool isSheetCut = false;
          foreach (var bl in mProfile.BendLines) {
             var bendDeduction = bl.BendDeduction;
             var bendOffset = totalBD + bendDeduction * 0.5;
             var (dx, dy) = bl.Orientation is EBLOrientation.Horizontal ? (0, bendOffset) : (-bendOffset, 0.0);
             newBendLines.Add (bl.Translated (dx, dy));
             totalBD += bendDeduction;
+            // Scanner bound
+            //var sBound = new Bound (new (0, pBound.MaxY), new (pBound.MaxX + 0.5, pBound.MaxY), new (pBound.MaxX + 0.5, bendDeduction), new (0, bendDeduction));
+            //while (!isSheetCut) {
+            //   if (mProfile.Vertices.Any (v => !v.IsInside (sBound))) {
+            //      var curves = mProfile.Curves.Where (c => c.StartPoint.Y > sBound.MaxY && c.StartPoint.Y < sBound.MaxY);
+            //      curves = curves.Select (c => c.Translated (0.0, bendDeduction));
+            //      isSheetCut = true;
+            //   } else {
+            //      scanIncrement += 1.0;
+            //   }
+            //}
          }
       } else {
          double totalBD = 0;
@@ -97,7 +111,6 @@ public struct BendLine {
       return new (mStartPt + vector, mEndPt + vector, mBendDeduction);
    }
 
-   //public override string ToString () => $"Angle: {mAngle}\nRadius: {mRadius}\nDeduction: {mBendDeduction}\nKfactor: {mKFactor}";
    public override string ToString () => $"{mStartPt}, {mEndPt}";
    #endregion
 
@@ -136,7 +149,6 @@ public struct Profile {
             else mBendLines.Add (bl);
          }
       }
-
       mCentroid = BendUtils.Centroid (mVertices);
    }
    #endregion
@@ -146,6 +158,7 @@ public struct Profile {
    public readonly List<BendLine> BendLines => mBendLines;
    public readonly List<BPoint> Vertices => mVertices;
    public readonly BPoint Centroid => mCentroid;
+   public readonly Bound Bound => mBound;
    #endregion
 
    #region Methods --------------------------------------------------
@@ -159,7 +172,7 @@ public struct Profile {
    List<BendLine> mBendLines;
    List<BPoint> mVertices;
    BPoint mCentroid;
-
+   Bound mBound;
    #endregion
 }
 #endregion
@@ -198,11 +211,21 @@ public struct Curve {
    #endregion
 
    #region Properties -----------------------------------------------
-   public BPoint StartPoint => mStartPt;
-   public BPoint EndPoint => mEndPt;
-   public ELineType LineType => mLineType;
-   public ECurve CurveType => mCurveType;
+   public readonly BPoint StartPoint => mStartPt;
+   public readonly BPoint EndPoint => mEndPt;
+   public readonly ELineType LineType => mLineType;
+   public readonly ECurve CurveType => mCurveType;
+   public bool IsModified { readonly get => mIsModified; private set => mIsModified = value; }
    public string Tag => mTag ??= "";
+   #endregion
+
+   #region Methods --------------------------------------------------
+   public Curve Translated (double dx, double dy) {
+      var v = new BVector (dx, dy);
+      var pts = mCurvePoints.Select (p => p + v).ToArray ();
+      mIsModified = true;
+      return new (mCurveType, mTag ??= "", pts);
+   }
    #endregion
 
    #region Private Data ---------------------------------------------
@@ -210,7 +233,7 @@ public struct Curve {
    BPoint mStartPt, mEndPt;
    ECurve mCurveType;
    ELineType mLineType;
-   bool mIsClosed;
+   bool mIsClosed, mIsModified;
    string? mTag;
    #endregion
 }
@@ -229,12 +252,53 @@ public readonly record struct BPoint (double X, double Y) {
    }
    public override string ToString () => $"({X}, {Y})";
    public bool IsEqual (BPoint p) => p.X == X && p.Y == Y;
+   public bool IsInside (Bound b) => X < b.MaxX && X > b.MinX && Y < b.MaxY && Y < b.MinY;
    #endregion
 }
 #endregion
 
 #region struct BVector ----------------------------------------------------------------------------
 public readonly record struct BVector (double DX, double DY);
+#endregion
+
+#region struct Bound ------------------------------------------------------------------------------
+public struct Bound {
+   #region Constructors ---------------------------------------------
+   public Bound (BPoint cornerA, BPoint cornerB) {
+      MinX = Math.Min (cornerA.X, cornerB.X);
+      MaxX = Math.Max (cornerA.X, cornerB.X);
+      MinY = Math.Min (cornerA.Y, cornerB.Y);
+      MaxY = Math.Max (cornerA.Y, cornerB.Y);
+      (mHeight, mWidth) = (MaxY - MinY, MaxX - MinX);
+   }
+
+   public Bound (params BPoint[] pts) {
+      MinX = pts.Min (p => p.X);
+      MaxX = pts.Max (p => p.X);
+      MinY = pts.Min (p => p.Y);
+      MaxY = pts.Max (p => p.Y);
+      (mHeight, mWidth) = (MaxY - MinY, MaxX - MinX);
+   }
+   #endregion
+
+   #region Properties -----------------------------------------------
+   public bool IsEmpty => MinX > MaxX || MinY > MaxY;
+   public double MinX { get; init; }
+   public double MaxX { get; init; }
+   public double MinY { get; init; }
+   public double MaxY { get; init; }
+   public double Width => mWidth;
+   public double Height => mHeight;
+   public BPoint Mid => mMid;
+   public BPoint BMin => new (MinX, MinY);
+   public BPoint BMax => new (MaxX, MaxY);
+   #endregion
+
+   #region Private Data ---------------------------------------------
+   readonly BPoint mMid;
+   readonly double mHeight, mWidth;
+   #endregion
+}
 #endregion
 
 #region Enums -------------------------------------------------------------------------------------

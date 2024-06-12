@@ -29,29 +29,29 @@ internal class BProfileMaker {
       } else {
          var bendLines = mProfile.BendLines;
          var count = bendLines.Count;
-         var topBLines = bendLines.Take (count / 2).Reverse ().ToList ();
-         var bottomBLines = bendLines.TakeLast (count - topBLines.Count).ToList ();
+         var bottomBLines = bendLines.Take (count / 2).Reverse ().ToList ();
+         var topBLines = bendLines.TakeLast (count - bottomBLines.Count).ToList ();
          var tempCurves = new List<Curve> ();
-         newBendLines.AddRange (GetTranslatedBLines (bottomBLines, out totalBD));
-         foreach (var c in GetProfileCurves (mProfile, EBLLocation.Bottom)) {
-            var angle = c.StartPoint.AngleTo (c.EndPoint);
-            var (dx, dy) = angle is 0 or 180 ? (0.0, totalBD) : (-totalBD, 0);
-            if (angle is 90 or 270) {
-               var trimmed = c.StartPoint.Y < c.EndPoint.Y ? c.Trimmed (0, totalBD, 0, 0)
-                                                           : c.Trimmed (0, 0, 0, totalBD);
-               tempCurves.Add (trimmed);
-            } else
-               newCurves.Add (c.Translated (dx, dy));
-         }
          newBendLines.AddRange (GetTranslatedBLines (topBLines, out totalBD, isNegOff: true));
          foreach (var c in GetProfileCurves (mProfile, EBLLocation.Top)) {
             var angle = c.StartPoint.AngleTo (c.EndPoint);
             var (dx, dy) = angle is 0 or 180 ? (0.0, -totalBD) : (totalBD, 0);
-            newCurves.Add (c.Translated (dx, dy));
+            if (angle is 90 or 270) {
+               var trimmed = c.StartPoint.Y < c.EndPoint.Y ? c.Trimmed (0, 0, 0, -totalBD)
+                                                           : c.Trimmed (0, -totalBD, 0, 0);
+               tempCurves.Add (trimmed);
+            } else
+               newCurves.Add (c.Translated (dx, dy));
+         }
+         newBendLines.AddRange (GetTranslatedBLines (bottomBLines, out totalBD));
+         foreach (var c in GetProfileCurves (mProfile, EBLLocation.Bottom)) {
+            var angle = c.StartPoint.AngleTo (c.EndPoint);
+            var (dx, dy) = angle is 0 or 180 ? (0.0, totalBD) : (-totalBD, 0);
+            if (angle is 0 or 180) newCurves.Add (c.Translated (dx, dy));
          }
          foreach (var c in tempCurves) {
-            var trimmed = c.StartPoint.Y < c.EndPoint.Y ? c.Trimmed (0, 0, 0, -totalBD)
-                                                        : c.Trimmed (0, -totalBD, 0, 0);
+            var trimmed = c.StartPoint.Y < c.EndPoint.Y ? c.Trimmed (0, totalBD, 0, 0)
+                                                        : c.Trimmed (0, 0, 0, totalBD);
             newCurves.Add (trimmed);
          }
       }
@@ -77,8 +77,8 @@ internal class BProfileMaker {
 
    List<Curve> GetProfileCurves (Profile pf, EBLLocation loc) {
       var b = pf.Bound;
-      return pf.Curves.Where (c => loc is EBLLocation.Top ? c.StartPoint.Y == b.MaxY && c.EndPoint.Y == b.MaxY
-                                                          : c.StartPoint.Y == b.MinY || c.EndPoint.Y == b.MinY).ToList ();
+      return pf.Curves.Where (c => loc is EBLLocation.Top ? c.StartPoint.Y == b.MaxY || c.EndPoint.Y == b.MaxY
+                                                          : c.StartPoint.Y == b.MinY && c.EndPoint.Y == b.MinY).ToList ();
    }
    #endregion
 
@@ -160,13 +160,11 @@ public struct Profile {
    }
 
    public Profile (List<Curve> curves, List<BendLine> bendLines) {
-      (mCurves, mBendLines, mVertices) = (curves, [], []);
+      mBendLines = bendLines.OrderBy (bl => bl.StartPoint.Y).ToList ();
+      (mCurves, mVertices) = (curves, []);
       foreach (var c in mCurves) mVertices.Add (c.StartPoint);
       mCentroid = BendUtils.Centroid (mVertices);
-      foreach (var bl in bendLines) {
-         if (mBendLines.Any () && mBendLines.First ().StartPoint.Y < bl.StartPoint.Y)
-            mBendLines.Insert (0, bl);
-         else mBendLines.Add (bl);
+      foreach (var bl in mBendLines) {
          mVertices.Add (bl.StartPoint);
          mVertices.Add (bl.EndPoint);
       }

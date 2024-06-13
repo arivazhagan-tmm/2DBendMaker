@@ -3,13 +3,16 @@
 internal class BProfileMaker {
    #region Constructors ---------------------------------------------
    public BProfileMaker (Profile profile, EBDAlgorithm algorithm) => (mProfile, mAlgorithm) = (profile, algorithm);
+
+   public BProfileMaker () { }
    #endregion
 
    #region Properties -----------------------------------------------
    #endregion
 
    #region Methods --------------------------------------------------
-   public BendProfile MakeBendProfile () {
+   public BendProfile MakeBendProfile (Profile profile, EBDAlgorithm algorithm) {
+      (mProfile, mAlgorithm) = (profile, algorithm);
       var totalBD = 0.0;
       List<BendLine> newBendLines = [];
       List<Curve> newCurves = [];
@@ -68,7 +71,7 @@ internal class BProfileMaker {
       foreach (var bl in blines) {
          var (bd, orient) = (bl.BendDeduction, bl.Orientation);
          var offset = offFactor * (totalBD + 0.5 * bd);
-         var (dx, dy) = orient is EBLOrientation.Horizontal ? (0.0, offset) : (-offset, 0.0);
+         var (dx, dy) = orient is EBLOrientation.Horizontal ? (0.0, offset) : (offset, 0.0);
          totalBD += bd;
          newBendLines.Add (bl.Translated (dx, dy));
       }
@@ -160,7 +163,7 @@ public struct Profile {
    }
 
    public Profile (List<Curve> curves, List<BendLine> bendLines) {
-      mBendLines = bendLines.OrderBy (bl => bl.StartPoint.Y).ToList ();
+      mBendLines = bendLines.OrderBy (bl => bl.StartPoint.Y).ThenBy (bl => bl.StartPoint.X).ToList ();
       (mCurves, mVertices) = (curves, []);
       foreach (var c in mCurves) mVertices.Add (c.StartPoint);
       mCentroid = BendUtils.Centroid (mVertices);
@@ -212,7 +215,9 @@ public struct BendProfile {
 
    #region Properties -----------------------------------------------
    public readonly EBDAlgorithm BendDeductionAlgorithm => mBDAlgorithm;
-   public List<BPoint> Vertices => mVertices;
+   public readonly List<BPoint> Vertices => mVertices;
+   public readonly List<Curve> Curves => mCurves;
+   public readonly List<BendLine> BendLines => mBendLines;
    #endregion
 
    #region Private Data ---------------------------------------------
@@ -227,15 +232,10 @@ public struct BendProfile {
 #region struct Curve ------------------------------------------------------------------------------
 public struct Curve {
    #region Constructors ---------------------------------------------
-   public Curve (ECurve curveType, string tag = null, params BPoint[] points) {
-      var pts = points.ToList ();
-      (mCurvePoints, mCurveType) = (pts, curveType);
+   public Curve (ECurve curveType, int index, string tag = null!, params BPoint[] points) {
+      (mCurvePoints, mCurveType, mIndex) = (points, curveType, index);
       (mStartPt, mEndPt) = (points[0], points[^1]);
       mTag = tag;
-   }
-
-   public Curve (ECurve curveType, BPoint startpoint, BPoint endpoint) {
-      (mCurveType, mStartPt, mEndPt) = (curveType, startpoint, endpoint);
    }
    #endregion
 
@@ -245,30 +245,38 @@ public struct Curve {
    public readonly ELineType LineType => mLineType;
    public readonly ECurve CurveType => mCurveType;
    public string Tag => mTag ??= "";
-   public readonly Guid ID => mID;
+   public int Index { get => mIndex; set => mIndex = value; }
+   public int[] CCIndices { get => mConnectedCurveIndices ??= []; private set => mConnectedCurveIndices = value; }
    #endregion
 
    #region Methods --------------------------------------------------
    public Curve Translated (double dx, double dy) {
       var v = new BVector (dx, dy);
-      var pts = mCurvePoints.Select (p => p.Translated (v)).ToArray ();
-      return new (mCurveType, mTag ??= "", pts);
+      var pts = mCurvePoints?.Select (p => p.Translated (v)).ToArray ();
+      var translatedCurve = new Curve (mCurveType, mIndex, mTag ??= "", pts);
+      return translatedCurve;
    }
 
    public Curve Trimmed (double startDx, double startDy, double endDx, double endDy) {
       var (startPt, endPt) = (new BPoint (mStartPt.X + startDx, mStartPt.Y + startDy, mStartPt.Index),
                               new BPoint (mEndPt.X + endDx, mEndPt.Y + endDy, mEndPt.Index));
-      return new Curve (ECurve.Line, startPt, endPt);
+      var trimmedCurve = new Curve (mCurveType, mIndex, "", startPt, endPt);
+      return trimmedCurve;
    }
+
+   public void SetCCIndices (int[] indices) => mConnectedCurveIndices = indices;
+
+   public override string ToString () => $"{mIndex}, {mStartPt}, {mEndPt}";
    #endregion
 
    #region Private Data ---------------------------------------------
-   List<BPoint> mCurvePoints;
+   BPoint[]? mCurvePoints;
    BPoint mStartPt, mEndPt;
    ECurve mCurveType;
    ELineType mLineType;
    string? mTag;
-   Guid mID;
+   int mIndex;
+   int[]? mConnectedCurveIndices;
    #endregion
 }
 #endregion
@@ -301,6 +309,7 @@ public struct Bound {
       MinY = Math.Min (cornerA.Y, cornerB.Y);
       MaxY = Math.Max (cornerA.Y, cornerB.Y);
       (mHeight, mWidth) = (MaxY - MinY, MaxX - MinX);
+      mMid = new ((MaxX + MinX) * 0.5, (MaxY + MinY) * 0.5);
    }
 
    public Bound (params BPoint[] pts) {
@@ -309,6 +318,7 @@ public struct Bound {
       MinY = pts.Min (p => p.Y);
       MaxY = pts.Max (p => p.Y);
       (mHeight, mWidth) = (MaxY - MinY, MaxX - MinX);
+      mMid = new ((MaxX + MinX) * 0.5, (MaxY + MinY) * 0.5);
    }
    #endregion
 
@@ -318,9 +328,19 @@ public struct Bound {
    public double MaxX { get; init; }
    public double MinY { get; init; }
    public double MaxY { get; init; }
+   public BPoint Mid => mMid;
    public double Width => mWidth;
    public double Height => mHeight;
    #endregion
+
+   public Bound Inflated (BPoint ptAt, double factor) {
+      if (IsEmpty) return this;
+      var minX = ptAt.X - (ptAt.X - MinX) * factor;
+      var maxX = ptAt.X + (MaxX - ptAt.X) * factor;
+      var minY = ptAt.Y - (ptAt.Y - MinY) * factor;
+      var maxY = ptAt.Y + (MaxY - ptAt.Y) * factor;
+      return new (new (minX, minY), new (maxX, maxY));
+   }
 
    #region Private Data ---------------------------------------------
    readonly BPoint mMid;

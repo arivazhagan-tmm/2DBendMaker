@@ -1,65 +1,75 @@
-﻿using System.IO;
+﻿using BendMaker;
+using System.IO;
 
-namespace BendMaker;
-
-public class GeoRead {
+public class GeoReader (string fileName) {
    #region Methods --------------------------------------------------
-   public Profile ReadGeo () {
-      OpenFileDialog openFile = new () { Filter = "Geo files (*.geo)|*.geo" };
-      if (openFile.ShowDialog () == DialogResult.OK && openFile.FileName != "") {
-         using StreamReader tr = new StreamReader (openFile.FileName);
-         filename = openFile.FileName;
-         string? line;
-         int i = 1;
-         while ((line = tr.ReadLine ())?.Trim () != null) {
-            if (line?.Trim () == "#~31") {
-               while ((line = tr.ReadLine ())?.Trim () == "P" && (line = tr.ReadLine ())?.Trim () == $"{i}") {
-                  var coordinates = ((line = tr.ReadLine ())?.Trim ())?.Split (" ");
+   public Profile ParseProfile () {
+      using StreamReader reader = new (FileName);
+      var vertices = new List<BPoint> ();
+      var curves = new List<Curve> ();
+      var bLines = new List<BendLine> ();
+      var bDeduction = 0.0;
+      string? line;
+      int i = 1;
+      while (ReadLine (out line)) {
+         switch (line) {
+            case "#~31":
+               while (ReadLine (out line) && line is "P" && ReadLine (out line) && line == $"{i}") {
+                  ReadLine (out line);
+                  var coordinates = line.Split (" ");
                   var (x, y) = (double.Parse (coordinates[0]), double.Parse (coordinates[1]));
-                  mPoints.Add (new BPoint (x, y, i));
-                  tr.ReadLine ();
+                  vertices.Add (new BPoint (x, y, i));
+                  SkipLine ();
                   i++;
                }
-            } else if (line?.Trim () == "#~331") {
-               while ((line = tr.ReadLine ())?.Trim () == "LIN") {
-                  tr.ReadLine ();
-                  var coordinates = ((line = tr.ReadLine ())?.Trim ())?.Split (" ");
-                  var (p1, p2) = (mPoints[int.Parse (coordinates[0]) - 1], mPoints[int.Parse (coordinates[1]) - 1]);
-                  mCurves.Add (new Curve (ECurve.Line, null, p1, p2));
-                  tr.ReadLine ();
+               break;
+            case "#~331":
+               int curveIndex = 0;
+               while (ReadLine (out line) && line is "LIN") {
+                  SkipLine ();
+                  var (v1, v2) = ParsePoints ();
+                  curves.Add (new Curve (ECurve.Line, curveIndex++, string.Empty, v1, v2));
+                  SkipLine ();
                }
                i = 0;
-            } else if (line?.Trim () == "#~37") {
-               for (int j = 0; j < 3; j++) tr.ReadLine ();
-               mBendDeduction = -1 * double.Parse (((line = tr.ReadLine ())?.Trim ()) ?? "");
+               break;
+
+            case "#~37":
+               for (int j = 0; j < 3; j++) SkipLine ();
+               ReadLine (out line);
+               bDeduction = -1 * double.Parse (line);
                i++;
-            } else if (line?.Trim () == "#~371") {
-               for (int j = 0; j < 2; j++) tr.ReadLine ();
-               var coordinates = (line = tr.ReadLine ())?.Trim ().Split (" ");
-               var (p1, p2) = (mPoints[int.Parse (coordinates[0]) - 1], mPoints[int.Parse (coordinates[1]) - 1]);
-               mBendLine = new BendLine (p1, p2, mBendDeduction);
-               mBendLines.Add (mBendLine);
-            }
+               break;
+
+            case "#~371":
+               for (int j = 0; j < 2; j++) SkipLine ();
+               var (p1, p2) = ParsePoints ();
+               bLines.Add (new BendLine (p1, p2, bDeduction));
+               break;
          }
       }
-      return mProfile = new Profile (mCurves, mBendLines);
+      return new Profile (curves, bLines);
+
+      bool ReadLine (out string str) {
+         str = reader.ReadLine ()!;
+         if (str is null) return false;
+         else {
+            str = str.Trim ();
+            return true;
+         }
+      }
+
+      (BPoint, BPoint) ParsePoints () {
+         ReadLine (out string str);
+         var coords = str.Split (" ");
+         return (vertices[int.Parse (coords[0]) - 1], vertices[int.Parse (coords[1]) - 1]);
+      }
+
+      void SkipLine () => reader.ReadLine ();
    }
    #endregion
 
    #region Properties -----------------------------------------------
-   public List<BendLine> GetBendInfo => mBendLines;
-   public List<BPoint> Points => mPoints;
-   public string FileName => filename ??= "";
-   #endregion
-
-   #region Private Data ---------------------------------------------
-   double mBendAngle, mBendDeduction, mBendRadius;
-   Profile mProfile;
-   List<BPoint> mPoints = new ();
-   List<Curve> mCurves = new ();
-   List<BendLine> mBendLines = new ();
-   BendLine mBendLine;
-   string? filename;
+   public readonly string FileName = fileName;
    #endregion
 }
-

@@ -11,6 +11,13 @@ public readonly record struct BPoint (double X, double Y, int Index = -1) {
    public bool IsEqual (BPoint p) => p.X == X && p.Y == Y;
    public bool IsInside (Bound b) => X < b.MaxX && X > b.MinX && Y < b.MaxY && Y < b.MinY;
    public BPoint Translated (BVector v) => new (X + v.DX, Y + v.DY, Index);
+   /// <summary>
+   /// </summary>
+   /// <param name="pt"> Point to be radially moved</param>
+   /// <param name="r">Distance at point to be moved</param>
+   /// <param name="th">Angle at the point to be moved</param>
+   /// <returns></returns>
+   public BPoint RadialMove (BPoint pt, double r, double th) => new (pt.X + r * Math.Cos (th), pt.Y + r * Math.Sin (th));
    #endregion
 }
 #endregion

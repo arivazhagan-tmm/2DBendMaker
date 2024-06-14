@@ -1,5 +1,4 @@
-﻿using BendMaker;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Media;
 
 
@@ -13,6 +12,10 @@ static public class BendUtils {
       var bendAllowance = angle * (kFactor * thickness + radius);
       return double.Round (Math.Abs (totalSetBack - bendAllowance), 3);
    }
+
+   public static double GetBendAllowance (double angle, double kFactor, double thickness, double radius)
+      => angle.ToRadians () * (kFactor * thickness + radius);
+
    public static double ToRadians (this double theta) => theta * sFactor;
    public static double ToDegrees (this double theta) => theta / sFactor;
    /// <summary>Returns a new point with applied transformation</summary>

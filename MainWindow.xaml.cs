@@ -5,6 +5,8 @@ using System.Windows.Media;
 using VA = System.Windows.VerticalAlignment;
 using HA = System.Windows.HorizontalAlignment;
 using Microsoft.Win32;
+using System.Data;
+using System.Windows.Controls.Primitives;
 
 namespace BendMaker;
 
@@ -12,6 +14,7 @@ namespace BendMaker;
 /// Interaction logic for MainWindow.xaml
 /// </summary>
 public partial class MainWindow : Window {
+   #region Constructors ---------------------------------------------
    public MainWindow () {
       InitializeComponent ();
       (Height, Width) = (750, 800);
@@ -20,8 +23,11 @@ public partial class MainWindow : Window {
       WindowStyle = WindowStyle.SingleBorderWindow;
       Loaded += OnLoaded; ;
    }
+   #endregion
 
+   #region Properties -----------------------------------------------
    public static MainWindow? It;
+   #endregion
 
    #region Implementation -------------------------------------------
    void OnLoaded (object sender, RoutedEventArgs e) {
@@ -50,8 +56,7 @@ public partial class MainWindow : Window {
             mGeoReader = new (dlg.FileName);
             mBPM ??= new ();
             mProfile = mGeoReader.ParseProfile ();
-            mBendProfile = mBPM.MakeBendProfile (mProfile, EBDAlgorithm.EquallyDistributed);
-            if (mViewport != null) (mViewport.Profile, mViewport.BendProfile) = (mProfile, mBendProfile);
+            if (mViewport != null) mViewport.Profile = mProfile;
          }
       };
       var saveMenu = new MenuItem () { Header = "_Save..." };
@@ -67,8 +72,26 @@ public partial class MainWindow : Window {
       fileMenu.Items.Add (saveMenu);
       menu.Items.Add (fileMenu);
       menuPanel.Children.Add (menu);
-      var optionPanel = new StackPanel () { Width = 100.0, Name = "CadOptions", HorizontalAlignment = HA.Left, Margin = new Thickness (0, 50, 0, 0) };
-
+      var optionPanel = new StackPanel () { HorizontalAlignment = HA.Left, Margin = new Thickness (0, 50, 0, 0) };
+      var btnStyle = new Style ();
+      btnStyle.Setters.Add (new Setter (HeightProperty, 40.0));
+      btnStyle.Setters.Add (new Setter (BackgroundProperty, Brushes.WhiteSmoke));
+      btnStyle.Setters.Add (new Setter (MarginProperty, new Thickness (5.0)));
+      btnStyle.Setters.Add (new Setter (HorizontalAlignmentProperty, HA.Left));
+      btnStyle.Setters.Add (new Setter (VerticalAlignmentProperty, VA.Center));
+      var borderStyle = new Style () { TargetType = typeof (Border) };
+      borderStyle.Setters.Add (new Setter (Border.CornerRadiusProperty, new CornerRadius (5.0)));
+      borderStyle.Setters.Add (new Setter (Border.BorderThicknessProperty, new Thickness (5.0)));
+      btnStyle.Resources = new ResourceDictionary { [typeof (Border)] = borderStyle };
+      foreach (var name in Enum.GetNames (typeof (EOption))) {
+         var btn = new ToggleButton () {
+            Content = name,
+            ToolTip = name,
+            Style = btnStyle
+         };
+         btn.Click += OnOptionClicked;
+         optionPanel.Children.Add (btn);
+      }
       mViewport = new Viewport ();
       var viewportPanel = new WrapPanel ();
       viewportPanel.MouseEnter += (s, e) => Cursor = Cursors.Cross;
@@ -93,8 +116,19 @@ public partial class MainWindow : Window {
       DockPanel.SetDock (optionPanel, Dock.Left);
       mMainPanel.Content = dp;
    }
-   #endregion
 
+   void OnOptionClicked (object sender, RoutedEventArgs e) {
+      if (sender is not ToggleButton btn || mViewport is null) return;
+      if (!Enum.TryParse ($"{btn.ToolTip}", out EOption opt)) return;
+      switch (opt) {
+         case EOption.MakeBendProfile:
+            if (mViewport is null || mBPM is null || mViewport.HasBProfile) return;
+            mBendProfile = mBPM.MakeBendProfile (mProfile, EBDAlgorithm.EquallyDistributed);
+            mViewport.BendProfile = mBendProfile;
+            break;
+      }
+   }
+   #endregion
 
    #region Private Data ---------------------------------------------
    Brush? mBGColor;
@@ -107,6 +141,8 @@ public partial class MainWindow : Window {
    #endregion
 }
 
+public enum EOption { MakeBendProfile }
+
 internal class Viewport : Canvas {
    #region Constructors ---------------------------------------------
    public Viewport () => Loaded += OnLoaded;
@@ -115,6 +151,7 @@ internal class Viewport : Canvas {
    #region Properties -----------------------------------------------
    public Profile Profile { get => mProfile; set { mProfile = value; } }
    public BendProfile BendProfile { get => mBendProfile; set { mBendProfile = value; UpdateBound (); } }
+   public bool HasBProfile => mBendProfile.Curves != null;
    #endregion
 
    #region Methods --------------------------------------------------
@@ -159,8 +196,7 @@ internal class Viewport : Canvas {
       InvalidateVisual ();
    }
 
-   void OnMouseLeftButtonDown (object sender, MouseButtonEventArgs e) {
-   }
+   void OnMouseLeftButtonDown (object sender, MouseButtonEventArgs e) { }
 
    void OnMouseMove (object sender, MouseEventArgs e) {
       mCurrentMousePt = e.GetPosition (this).Transform (mInvProjXfm).ToBPoint ();
@@ -168,12 +204,11 @@ internal class Viewport : Canvas {
       InvalidateVisual ();
    }
 
-   void OnMouseUp (object sender, MouseButtonEventArgs e) {
-   }
+   void OnMouseUp (object sender, MouseButtonEventArgs e) { }
 
    protected override void OnRender (DrawingContext dc) {
       dc.DrawRectangle (Background, mBGPen, mViewportRect);
-      if (mProfile.Curves is null || mBendProfile.Curves is null) return;
+      if (mProfile.Curves is null) return;
       var v = new BVector (mProfile.Bound.MaxX + 5, 0);
       foreach (var c in mProfile.Curves) {
          var (start, end) = (mProjXfm.Transform (ToWP (c.StartPoint)), mProjXfm.Transform (ToWP (c.EndPoint)));
@@ -183,13 +218,15 @@ internal class Viewport : Canvas {
          var (start, end) = (mProjXfm.Transform (ToWP (bl.StartPoint)), mProjXfm.Transform (ToWP (bl.EndPoint)));
          dc.DrawLine (mBLPen, start, end);
       }
-      foreach (var c in mBendProfile.Curves) {
-         var (start, end) = (mProjXfm.Transform (ToWP (c.StartPoint.Translated (v))), mProjXfm.Transform (ToWP (c.EndPoint.Translated (v))));
-         dc.DrawLine (mDwgPen, start, end);
-      }
-      foreach (var bl in mBendProfile.BendLines) {
-         var (start, end) = (mProjXfm.Transform (ToWP (bl.StartPoint.Translated (v))), mProjXfm.Transform (ToWP (bl.EndPoint.Translated (v))));
-         dc.DrawLine (mBLPen, start, end);
+      if (HasBProfile) {
+         foreach (var c in mBendProfile.Curves) {
+            var (start, end) = (mProjXfm.Transform (ToWP (c.StartPoint.Translated (v))), mProjXfm.Transform (ToWP (c.EndPoint.Translated (v))));
+            dc.DrawLine (mDwgPen, start, end);
+         }
+         foreach (var bl in mBendProfile.BendLines) {
+            var (start, end) = (mProjXfm.Transform (ToWP (bl.StartPoint.Translated (v))), mProjXfm.Transform (ToWP (bl.EndPoint.Translated (v))));
+            dc.DrawLine (mBLPen, start, end);
+         }
       }
       base.OnRender (dc);
       Point ToWP (BPoint p) => new (p.X, p.Y);
@@ -198,12 +235,13 @@ internal class Viewport : Canvas {
    void UpdateBound () {
       var pts = mProfile.Vertices;
       var v = new BVector (mProfile.Bound.MaxX + 5, 0);
-      pts.AddRange (mBendProfile.Vertices.Select (a => a.Translated (v)));
+      if (HasBProfile)
+         pts.AddRange (mBendProfile.Vertices.Select (a => a.Translated (v)));
       UpdateProjXform (new Bound (pts.ToArray ()));
    }
 
    void UpdateProjXform (Bound b) {
-      var margin = 10.0;
+      var margin = 20.0;
       double scaleX = (mViewportWidth - margin) / b.Width,
              scaleY = (mViewportHeight - margin) / b.Height;
       double scale = Math.Min (scaleX, scaleY);

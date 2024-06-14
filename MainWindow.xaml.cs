@@ -7,6 +7,7 @@ using HA = System.Windows.HorizontalAlignment;
 using Microsoft.Win32;
 using System.Data;
 using System.Windows.Controls.Primitives;
+using System.IO;
 
 namespace BendMaker;
 
@@ -56,12 +57,16 @@ public partial class MainWindow : Window {
             mGeoReader = new (dlg.FileName);
             mBPM ??= new ();
             mProfile = mGeoReader.ParseProfile ();
-            if (mViewport != null) mViewport.Profile = mProfile;
+            if (mViewport != null) {
+               mViewport.Profile = mProfile;
+               mViewport.ZoomExtents ();
+            }
          }
       };
       var saveMenu = new MenuItem () { Header = "_Save..." };
       saveMenu.Click += (s, e) => {
          var currentFileName = mGeoReader?.FileName;
+         currentFileName = Path.GetFileNameWithoutExtension (currentFileName);
          var dlg = new SaveFileDialog () { FileName = $"{currentFileName}_BendProfile", Filter = "GEO|*.geo" };
          if (dlg.ShowDialog () is true) {
             mGeoWriter = new (mBendProfile, currentFileName!);

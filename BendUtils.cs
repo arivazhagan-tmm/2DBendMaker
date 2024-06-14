@@ -2,6 +2,9 @@
 using System.Windows;
 using System.Windows.Media;
 
+
+namespace BendMaker;
+
 static public class BendUtils {
    static double sFactor = Math.PI / 180;
    static public double GetBendDeduction (double angle, double kFactor, double thickness, double radius) {

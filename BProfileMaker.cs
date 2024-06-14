@@ -14,10 +14,11 @@ internal class BProfileMaker {
    public BendProfile MakeBendProfile (Profile profile, EBDAlgorithm algorithm) {
       (mProfile, mAlgorithm) = (profile, algorithm);
       var totalBD = 0.0;
+      int verBLCount = 0, horBLCount = 0;
       List<BendLine> newBendLines = [];
       List<Curve> newCurves = [];
       if (mAlgorithm is EBDAlgorithm.PartiallyDistributed) {
-         newBendLines.AddRange (GetTranslatedBLines (mProfile.BendLines, out totalBD));
+         newBendLines.AddRange (GetTranslatedBLines (mProfile.BendLines, out totalBD, out horBLCount, out verBLCount));
          var centroidY = mProfile.Centroid.Y;
          foreach (var curve in mProfile.Curves) {
             var newCurve = curve.StartPoint.Y < centroidY && curve.EndPoint.Y < centroidY ? curve.Translated (0, totalBD)
@@ -32,30 +33,54 @@ internal class BProfileMaker {
       } else {
          var bendLines = mProfile.BendLines;
          var count = bendLines.Count;
-         var bottomBLines = bendLines.Take (count / 2).Reverse ().ToList ();
-         var topBLines = bendLines.TakeLast (count - bottomBLines.Count).ToList ();
+         var bottomBLines = bendLines.Take (count / 2).Reverse ().ToList (); // Bottom and Left
+         var topBLines = bendLines.TakeLast (count - bottomBLines.Count).ToList (); // Top and right
          var tempCurves = new List<Curve> ();
-         newBendLines.AddRange (GetTranslatedBLines (topBLines, out totalBD, isNegOff: true));
-         foreach (var c in GetProfileCurves (mProfile, EBLLocation.Top)) {
+
+         newBendLines.AddRange (GetTranslatedBLines (topBLines, out totalBD, out horBLCount, out verBLCount, isNegOff: true));
+         foreach (var c in GetProfileCurves (mProfile, EBLLocation.Top, verBLCount > 0, horBLCount > 0)) {
             var angle = c.StartPoint.AngleTo (c.EndPoint);
-            var (dx, dy) = angle is 0 or 180 ? (0.0, -totalBD) : (totalBD, 0);
-            if (angle is 90 or 270) {
-               var trimmed = c.StartPoint.Y < c.EndPoint.Y ? c.Trimmed (0, 0, 0, -totalBD)
-                                                           : c.Trimmed (0, -totalBD, 0, 0);
-               tempCurves.Add (trimmed);
-            } else
+            var (dx, dy) = angle is 0 or 180 ? (0.0, -totalBD) : (-totalBD, 0);
+            if (angle is 0 or 180) {
                newCurves.Add (c.Translated (dx, dy));
+               foreach (var idx in BendUtils.GetCCIndices (c, mProfile.Curves)) {
+                  var conCurve = mProfile.Curves.Where (cC => cC.Index == idx).First ();
+                  var trimmed = conCurve.StartPoint.Y < c.StartPoint.Y ? conCurve.Trimmed (0, 0, 0, -totalBD)
+                                                                    : conCurve.Trimmed (0, -totalBD, 0, 0);
+                  tempCurves.Add (trimmed);
+               }
+            } else {
+               newCurves.Add (c.Translated (dx, dy));
+               foreach (var idx in BendUtils.GetCCIndices(c, mProfile.Curves)) {
+                  var conCurve = mProfile.Curves.Where (cC => cC.Index == idx).First ();
+                  var trimmed = conCurve.StartPoint.X < c.StartPoint.X ? conCurve.Trimmed (0, 0, -totalBD, 0)
+                                                                       : conCurve.Trimmed (-totalBD, 0, 0, 0);
+                  tempCurves.Add (trimmed);
+               }
+            }
          }
-         newBendLines.AddRange (GetTranslatedBLines (bottomBLines, out totalBD));
-         foreach (var c in GetProfileCurves (mProfile, EBLLocation.Bottom)) {
+
+         newBendLines.AddRange (GetTranslatedBLines (bottomBLines, out totalBD, out horBLCount, out verBLCount));
+         foreach (var c in GetProfileCurves (mProfile, EBLLocation.Bottom, verBLCount > 0, horBLCount > 0)) {
             var angle = c.StartPoint.AngleTo (c.EndPoint);
-            var (dx, dy) = angle is 0 or 180 ? (0.0, totalBD) : (-totalBD, 0);
-            if (angle is 0 or 180) newCurves.Add (c.Translated (dx, dy));
-         }
-         foreach (var c in tempCurves) {
-            var trimmed = c.StartPoint.Y < c.EndPoint.Y ? c.Trimmed (0, totalBD, 0, 0)
-                                                        : c.Trimmed (0, 0, 0, totalBD);
-            newCurves.Add (trimmed);
+            var (dx, dy) = angle is 0 or 180 ? (0.0, totalBD) : (totalBD, 0);
+            if (angle is 0 or 180) {
+               newCurves.Add (c.Translated (dx, dy));
+               foreach (var idx in BendUtils.GetCCIndices (c, mProfile.Curves)) {
+                  var conCurve = tempCurves.Where (tC => tC.Index == idx).First ();
+                  var trimmed = conCurve.StartPoint.Y > c.StartPoint.Y ? conCurve.Trimmed (0, 0, 0, totalBD)
+                                                                       : conCurve.Trimmed (0, totalBD, 0, 0);
+                  newCurves.Add (trimmed);
+               }
+            } else {
+               newCurves.Add (c.Translated (dx, dy));
+               foreach (var idx in BendUtils.GetCCIndices (c, mProfile.Curves)) {
+                  var conCurve = tempCurves.Where (tC => tC.Index == idx).First ();
+                  var trimmed = conCurve.StartPoint.X > c.StartPoint.X ? conCurve.Trimmed (0, 0, totalBD, 0)
+                                                                       : conCurve.Trimmed (totalBD, 0, 0, 0);
+                  newCurves.Add (trimmed);
+               }
+            }
          }
       }
       mBendProfile = new BendProfile (mAlgorithm, newCurves, newBendLines);
@@ -64,24 +89,42 @@ internal class BProfileMaker {
    #endregion
 
    #region Implementation -------------------------------------------
-   List<BendLine> GetTranslatedBLines (List<BendLine> blines, out double totalBD, bool isNegOff = false) {
+   List<BendLine> GetTranslatedBLines (List<BendLine> blines, out double totalBD, out int horCount, out int verCount, bool isNegOff = false) {
       var newBendLines = new List<BendLine> ();
       var offFactor = isNegOff ? -1 : 1;
       totalBD = 0.0;
+      horCount = verCount = 0;
       foreach (var bl in blines) {
          var (bd, orient) = (bl.BendDeduction, bl.Orientation);
          var offset = offFactor * (totalBD + 0.5 * bd);
-         var (dx, dy) = orient is EBLOrientation.Horizontal ? (0.0, offset) : (offset, 0.0);
+         (double dx, double dy) = (0, 0);
+         if (orient is EBLOrientation.Horizontal) {
+            horCount += 1;
+            (dx, dy) = (0.0, offset);
+         } else if (orient is EBLOrientation.Vertical) {
+            verCount += 1;
+            (dx, dy) = (offset, 0.0);
+         }
+         //var (dx, dy) = orient is EBLOrientation.Horizontal ? (0.0, offset) : (offset, 0.0);
          totalBD += bd;
          newBendLines.Add (bl.Translated (dx, dy));
       }
       return newBendLines;
    }
 
-   List<Curve> GetProfileCurves (Profile pf, EBLLocation loc) {
+   List<Curve> GetProfileCurves (Profile pf, EBLLocation loc, bool HasVerBLine, bool HasHorBLine) { 
       var b = pf.Bound;
-      return pf.Curves.Where (c => loc is EBLLocation.Top ? c.StartPoint.Y == b.MaxY || c.EndPoint.Y == b.MaxY
-                                                          : c.StartPoint.Y == b.MinY && c.EndPoint.Y == b.MinY).ToList ();
+      List<Curve> alignedCurves = [];
+      if (HasVerBLine) { // Handles vertical bend lines and gives 
+         alignedCurves.Add (pf.Curves.Where (c => loc is EBLLocation.Top ? c.StartPoint.X == b.MaxX && c.EndPoint.X == b.MaxX
+                                                                         : c.StartPoint.X == b.MinX && c.EndPoint.X == b.MinX).First ());
+      }
+
+      if (HasHorBLine) {
+         alignedCurves.Insert (0, pf.Curves.Where (c => loc is EBLLocation.Top ? c.StartPoint.Y == b.MaxY && c.EndPoint.Y == b.MaxY
+                                                             : c.StartPoint.Y == b.MinY && c.EndPoint.Y == b.MinY).First ());
+      }
+      return alignedCurves;
    }
    #endregion
 

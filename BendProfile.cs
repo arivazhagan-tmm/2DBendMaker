@@ -15,16 +15,6 @@ public struct BendProfile {
     }
     #endregion
 
-    #region Method ---------------------------------------------------
-    public double Area (List<BPoint> vertices) {
-        int n = vertices.Count; double area = 0;
-        for (int i = 0; i < n - 1; i++)
-            area += vertices[i].X * vertices[i + 1].Y - vertices[i].Y * vertices[i + 1].X;
-        area += vertices[n - 1].X * vertices[0].Y - vertices[n - 1].Y * vertices[0].X;
-        return Math.Abs (area) / 2;
-    }
-    #endregion
-
     #region Properties -----------------------------------------------
     public readonly EBDAlgorithm BendDeductionAlgorithm => mBDAlgorithm;
     public readonly List<BPoint> Vertices => mVertices;

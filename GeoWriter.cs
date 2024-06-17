@@ -56,7 +56,7 @@ public class GeoWriter {
     public string BoundMin => $"{mBProfile.Bound.MinX:F9} {mBProfile.Bound.MinY:F9} 0.000000000";
     public string BoundMax => $"{mBProfile.Bound.MaxX:F9} {mBProfile.Bound.MaxY:F9} 0.000000000";
     public string Centriod => $"{mBProfile.Centroid.X:F9} {mBProfile.Centroid.Y:F9} 0.000000000";
-    public string Area => $"{mBProfile.Area (mBProfile.Curves.OrderBy (x => x.Index).Select (x => x.StartPoint).ToList ()):F9}";
+    public string Area => $"{BendUtils.Area (mBProfile.Curves.OrderBy (x => x.Index).Select (x => x.StartPoint).ToList ()):F9}";
     #endregion
 
     #region Private --------------------------------------------------

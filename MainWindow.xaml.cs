@@ -72,6 +72,7 @@ public partial class MainWindow : Window {
                 mBPM ??= new ();
                 mProfile = mGeoReader.ParseProfile ();
                 if (mViewport != null) {
+                    if (mViewport.HasBProfile) mViewport.BendProfile = new ();
                     mViewport.Profile = mProfile;
                     mViewport.ZoomExtents ();
                 }
@@ -81,20 +82,23 @@ public partial class MainWindow : Window {
                 tbStyle.Setters.Add (new Setter (MarginProperty, new Thickness (5, 5, 0, 0)));
                 tbStyle.Setters.Add (new Setter (HorizontalAlignmentProperty, HA.Left));
                 tbStyle.Setters.Add (new Setter (VerticalAlignmentProperty, VA.Top));
-                var cmbox = new ComboBox () { SelectedIndex = 0, Width = 130, HorizontalAlignment = HA.Left };
-                cmbox.Items.Add (EBDAlgorithm.EquallyDistributed);
-                cmbox.Items.Add (EBDAlgorithm.PartiallyDistributed);
+                var cmbox = new ComboBox () {
+                    SelectedIndex = 0, Width = 130, HorizontalAlignment = HA.Left,
+                    Items = { EBDAlgorithm.EquallyDistributed, EBDAlgorithm.PartiallyDistributed }
+                };
+                mSelectedAlgorithm = (EBDAlgorithm)cmbox.SelectedIndex;
                 cmbox.SelectionChanged += (s, e) => {
                     mSelectedAlgorithm = (EBDAlgorithm)cmbox.SelectedIndex;
                     mIsBent = false;
                 };
+                var fileName = mGeoReader.FileName;
                 var tBD = Math.Round (mProfile!.BendLines.Sum (bendline => bendline.BendDeduction), 3);
                 string[] infobox = { "FileName : ", "Sheet Size : ", "BendLines : ", "Algorithm : ", "Final Sheet Size : ", "Total Bend Deduction : " };
-                string[] infoboxvalue = { $"{Path.GetFileNameWithoutExtension(mGeoReader!.FileName)}",
-                                          $"{mProfile.Bound.MaxX} X {mProfile.Bound.MaxY}",
+                string[] infoboxvalue = { $"{Path.GetFileNameWithoutExtension(fileName)}{Path.GetExtension(fileName)}",
+                                          $"{mProfile.Bound.Width:F2} X {mProfile.Bound.Height:F2}",
                                           $"{mProfile.BendLines.Count}", "",
                                           "",
-                                          $"{tBD}"};
+                                          $"{tBD:F2}"};
                 unfGrid.Children.Clear ();
                 for (int i = 0; i < infobox.Length; i++) {
                     unfGrid.Children.Add (new TextBlock () { Text = infobox[i], Style = tbStyle, Margin = new Thickness (5) });
@@ -105,8 +109,6 @@ public partial class MainWindow : Window {
                     optionPanel.Children.Add (unfGrid);
                 }
             }
-            mViewport!.BendProfile = new ();
-            mViewport!.InvalidateVisual ();
         };
         fileMenu.Items.Add (openMenu);
         fileMenu.Items.Add (saveMenu);
@@ -167,7 +169,7 @@ public partial class MainWindow : Window {
                     mViewport.BendProfile = mBendProfile;
                     mUnfGrid.Children.OfType<TextBlock> ()
                             .FirstOrDefault (tb => tb.Tag is int tag && tag == 4)!
-                            .Text = $"{mBendProfile.Bound.Width} X {mBendProfile.Bound.Height}";
+                            .Text = $"{mBendProfile.Bound.Width:F2} X {mBendProfile.Bound.Height:F2}";
                     mViewport.InvalidateVisual ();
                     mIsBent = true;
                     break;

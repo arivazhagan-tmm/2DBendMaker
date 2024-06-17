@@ -1,16 +1,27 @@
-﻿namespace BendMaker;
+﻿using static System.Math;
+
+namespace BendMaker;
 
 #region struct BPoint -----------------------------------------------------------------------------
 public readonly record struct BPoint (double X, double Y, int Index = -1) {
+    #region Properties -----------------------------------------------
+    public static BPoint Default => new (double.NaN, double.NaN);
+    #endregion
     #region Methods --------------------------------------------------
     public double AngleTo (BPoint p) {
         var angle = Math.Round (Math.Atan2 (p.Y - Y, p.X - X) * (180 / Math.PI), 2);
         return angle < 0 ? 360 + angle : angle;
     }
+    public double DistanceTo (BPoint p) => Round (Sqrt (Pow (p.X - X, 2) + Pow (p.Y - Y, 2)), 2);
     public override string ToString () => $"({X}, {Y})";
     public bool IsEqual (BPoint p) => p.X == X && p.Y == Y;
     public bool IsInside (Bound b) => X < b.MaxX && X > b.MinX && Y < b.MaxY && Y < b.MinY;
     public BPoint Translated (BVector v) => new (X + v.DX, Y + v.DY, Index);
+    public bool HasNearestPoint (IEnumerable<BPoint> pts, double delta, out BPoint nearestPoint) {
+        var pt = this;
+        nearestPoint = pts.Any (p => pt.DistanceTo (p) < delta) ? pts.ToList ().Find (p => pt.DistanceTo (p) < delta) : Default;
+        return !nearestPoint.Equals (Default);
+    }
     #endregion
 }
 #endregion

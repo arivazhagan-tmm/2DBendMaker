@@ -39,6 +39,7 @@ public struct BendLine {
                                             : EBLOrientation.Vertical
                                             : EBLOrientation.Inclined;
     }
+
     #endregion
 
     #region Private Data ---------------------------------------------

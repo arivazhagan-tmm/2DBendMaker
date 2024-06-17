@@ -45,7 +45,21 @@ public partial class MainWindow : Window {
         menuStyle.Setters.Add (new Setter (HeightProperty, 20.0));
         var menu = new Menu () { Background = mBGColor };
         var fileMenu = new MenuItem () { Style = menuStyle, Header = "_File" };
+        var saveMenu = new MenuItem () { Header = "_Save...", IsEnabled = false };
+        saveMenu.Click += (s, e) => {
+            if (!mIsSaved) {
+                var currentFileName = mGeoReader?.FileName;
+                var dlg = new SaveFileDialog () { FileName = $"{Path.GetFileNameWithoutExtension (currentFileName)}_BendProfile", Filter = "GEO|*.geo" };
+                if (dlg.ShowDialog () is true) {
+                    mGeoWriter = new (mBendProfile, currentFileName!);
+                    mGeoWriter.Save (dlg.FileName);
+                    (mIsSaved, saveMenu.IsEnabled) = (true, false);
+                }
+            }
+        };
         var openMenu = new MenuItem () { Header = "_Open...", IsEnabled = true };
+        var unfGrid = new UniformGrid () { Rows = 6, Columns = 2 };
+        var optionPanel = new StackPanel () { HorizontalAlignment = HA.Left, Margin = new Thickness (0, 50, 0, 0) };
         openMenu.Click += (s, e) => {
             var dlg = new OpenFileDialog () {
                 DefaultExt = ".geo",
@@ -53,35 +67,59 @@ public partial class MainWindow : Window {
                 Filter = "Geo files (*.geo)|*.geo"
             };
             if (dlg.ShowDialog () is true) {
+                (mIsSaved, mIsBent, saveMenu.IsEnabled) = (false, false, true);
                 mGeoReader = new (dlg.FileName);
                 mBPM ??= new ();
                 mProfile = mGeoReader.ParseProfile ();
                 if (mViewport != null) {
+                    if (mViewport.HasBProfile) mViewport.BendProfile = new ();
                     mViewport.Profile = mProfile;
                     mViewport.ZoomExtents ();
                 }
-            }
-        };
-        var saveMenu = new MenuItem () { Header = "_Save..." };
-        saveMenu.Click += (s, e) => {
-            var currentFileName = mGeoReader?.FileName;
-            var dlg = new SaveFileDialog () { FileName = $"{Path.GetFileNameWithoutExtension (currentFileName)}_BendProfile", Filter = "GEO|*.geo" };
-            if (dlg.ShowDialog () is true) {
-                mGeoWriter = new (mBendProfile, currentFileName!);
-                mGeoWriter.Save (dlg.FileName);
+                var tbStyle = new Style ();
+                tbStyle.Setters.Add (new Setter (HeightProperty, 20.0));
+                tbStyle.Setters.Add (new Setter (BackgroundProperty, Brushes.WhiteSmoke));
+                tbStyle.Setters.Add (new Setter (MarginProperty, new Thickness (5, 5, 0, 0)));
+                tbStyle.Setters.Add (new Setter (HorizontalAlignmentProperty, HA.Left));
+                tbStyle.Setters.Add (new Setter (VerticalAlignmentProperty, VA.Top));
+                var cmbox = new ComboBox () {
+                    SelectedIndex = 0, Width = 130, HorizontalAlignment = HA.Left,
+                    Items = { EBDAlgorithm.EquallyDistributed, EBDAlgorithm.PartiallyDistributed }
+                };
+                mSelectedAlgorithm = (EBDAlgorithm)cmbox.SelectedIndex;
+                cmbox.SelectionChanged += (s, e) => {
+                    mSelectedAlgorithm = (EBDAlgorithm)cmbox.SelectedIndex;
+                    mIsBent = false;
+                };
+                var fileName = mGeoReader.FileName;
+                var tBD = Math.Round (mProfile!.BendLines.Sum (bendline => bendline.BendDeduction), 3);
+                string[] infobox = { "FileName : ", "Sheet Size : ", "BendLines : ", "Algorithm : ", "Final Sheet Size : ", "Total Bend Deduction : " };
+                string[] infoboxvalue = { $"{Path.GetFileNameWithoutExtension(fileName)}{Path.GetExtension(fileName)}",
+                                          $"{mProfile.Bound.Width:F2} X {mProfile.Bound.Height:F2}",
+                                          $"{mProfile.BendLines.Count}", "",
+                                          "",
+                                          $"{tBD:F2}"};
+                unfGrid.Children.Clear ();
+                for (int i = 0; i < infobox.Length; i++) {
+                    unfGrid.Children.Add (new TextBlock () { Text = infobox[i], Style = tbStyle, Margin = new Thickness (5) });
+                    unfGrid.Children.Add (i == 3 ? cmbox : new TextBlock () { Tag = i, Text = infoboxvalue[i], Style = tbStyle, Margin = new Thickness (5) });
+                }
+                if (!optionPanel.Children.Contains (unfGrid)) {
+                    mUnfGrid = unfGrid;
+                    optionPanel.Children.Add (unfGrid);
+                }
             }
         };
         fileMenu.Items.Add (openMenu);
         fileMenu.Items.Add (saveMenu);
         menu.Items.Add (fileMenu);
         menuPanel.Children.Add (menu);
-        var optionPanel = new StackPanel () { HorizontalAlignment = HA.Left, Margin = new Thickness (0, 50, 0, 0) };
         var btnStyle = new Style ();
         btnStyle.Setters.Add (new Setter (HeightProperty, 40.0));
         btnStyle.Setters.Add (new Setter (BackgroundProperty, Brushes.WhiteSmoke));
         btnStyle.Setters.Add (new Setter (MarginProperty, new Thickness (5.0)));
         btnStyle.Setters.Add (new Setter (HorizontalAlignmentProperty, HA.Left));
-        btnStyle.Setters.Add (new Setter (VerticalAlignmentProperty, VA.Center));
+        btnStyle.Setters.Add (new Setter (VerticalAlignmentProperty, VA.Bottom));
         var borderStyle = new Style () { TargetType = typeof (Border) };
         borderStyle.Setters.Add (new Setter (Border.CornerRadiusProperty, new CornerRadius (5.0)));
         borderStyle.Setters.Add (new Setter (Border.BorderThicknessProperty, new Thickness (5.0)));
@@ -90,11 +128,12 @@ public partial class MainWindow : Window {
             var btn = new ToggleButton () {
                 Content = name,
                 ToolTip = name,
-                Style = btnStyle
+                Style = btnStyle,
             };
             btn.Click += OnOptionClicked;
             optionPanel.Children.Add (btn);
         }
+
         mViewport = new Viewport ();
         var viewportPanel = new WrapPanel ();
         viewportPanel.MouseEnter += (s, e) => Cursor = Cursors.Cross;
@@ -119,21 +158,30 @@ public partial class MainWindow : Window {
         DockPanel.SetDock (optionPanel, Dock.Left);
         mMainPanel.Content = dp;
     }
-
     void OnOptionClicked (object sender, RoutedEventArgs e) {
-        if (sender is not ToggleButton btn || mViewport is null) return;
-        if (!Enum.TryParse ($"{btn.ToolTip}", out EOption opt)) return;
-        switch (opt) {
-            case EOption.MakeBendProfile:
-                if (mViewport is null || mBPM is null || mViewport.HasBProfile) return;
-                mBendProfile = mBPM.MakeBendProfile (mProfile, EBDAlgorithm.EquallyDistributed);
-                mViewport.BendProfile = mBendProfile;
-                break;
+        if (!mIsBent) {
+            if (sender is not ToggleButton btn || mViewport is null) return;
+            if (!Enum.TryParse ($"{btn.ToolTip}", out EOption opt)) return;
+            switch (opt) {
+                case EOption.MakeBendProfile:
+                    if (mViewport is null || mBPM is null) return;
+                    mBendProfile = mBPM.MakeBendProfile (mProfile, mSelectedAlgorithm);
+                    mViewport.BendProfile = mBendProfile;
+                    mUnfGrid.Children.OfType<TextBlock> ()
+                            .FirstOrDefault (tb => tb.Tag is int tag && tag == 4)!
+                            .Text = $"{mBendProfile.Bound.Width:F2} X {mBendProfile.Bound.Height:F2}";
+                    mViewport.InvalidateVisual ();
+                    mIsBent = true;
+                    break;
+            }
         }
     }
     #endregion
 
     #region Private Data ---------------------------------------------
+    bool mIsBent = false, mIsSaved = false, mIsAlgorithmChanged = false;
+    EBDAlgorithm mSelectedAlgorithm;
+    UniformGrid mUnfGrid;
     Brush? mBGColor;
     Viewport? mViewport;
     GeoReader? mGeoReader;

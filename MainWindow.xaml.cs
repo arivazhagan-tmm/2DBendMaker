@@ -56,8 +56,11 @@ public partial class MainWindow : Window {
             mGeoReader = new (dlg.FileName);
             mBPM ??= new ();
             mProfile = mGeoReader.ParseProfile ();
+            mCRProfile = new (mProfile);
+            mBendProfile = mCRProfile.Validation ();
             if (mViewport != null) {
                mViewport.Profile = mProfile;
+               mViewport.BendProfile = mBendProfile;
                mViewport.ZoomExtents ();
             }
          }
@@ -140,6 +143,7 @@ public partial class MainWindow : Window {
    GeoReader? mGeoReader;
    GeoWriter? mGeoWriter;
    Profile mProfile;
+   CRProfile mCRProfile;
    BProfileMaker? mBPM;
    BendProfile mBendProfile;
    #endregion

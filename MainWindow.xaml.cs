@@ -32,7 +32,7 @@ public partial class MainWindow : Window {
    #region Implementation -------------------------------------------
    void OnLoaded (object sender, RoutedEventArgs e) {
       It = this;
-      Title = "Bend Profile Maker";
+      Title = "Bend Part Maker";
       mBGColor = new SolidColorBrush (Color.FromArgb (255, 200, 200, 200));
       Background = mBGColor;
       var spStyle = new Style ();
@@ -51,7 +51,7 @@ public partial class MainWindow : Window {
             var currentFileName = mGeoReader?.FileName;
             var dlg = new SaveFileDialog () { FileName = $"{Path.GetFileNameWithoutExtension (currentFileName)}_BendProfile", Filter = "GEO|*.geo" };
             if (dlg.ShowDialog () is true) {
-               mGeoWriter = new (mBendProfile, currentFileName!);
+               mGeoWriter = new (mProcessedPart, currentFileName!);
                mGeoWriter.Save (dlg.FileName);
                (mIsSaved, saveMenu.IsEnabled) = (true, false);
             }
@@ -69,11 +69,10 @@ public partial class MainWindow : Window {
          if (dlg.ShowDialog () is true) {
             (mIsSaved, mIsBent, saveMenu.IsEnabled) = (false, false, true);
             mGeoReader = new (dlg.FileName);
-            mBPM ??= new ();
-            mProfile = mGeoReader.ParseProfile ();
+            mPart = mGeoReader.ParseProfile ();
             if (mViewport != null) {
-               if (mViewport.HasBProfile) mViewport.BendProfile = new ();
-               mViewport.Profile = mProfile;
+               if (mViewport.HasProcessedPart) mViewport.ProcessedPart = new ();
+               mViewport.Part = mPart;
                mViewport.ZoomExtents ();
             }
             var tbStyle = new Style ();
@@ -83,7 +82,7 @@ public partial class MainWindow : Window {
             tbStyle.Setters.Add (new Setter (HorizontalAlignmentProperty, HA.Left));
             tbStyle.Setters.Add (new Setter (VerticalAlignmentProperty, VA.Top));
             var cmbox = new ComboBox () {
-               SelectedIndex = 0, Width = 130, HorizontalAlignment = HA.Left,
+               SelectedIndex = 0, Width = 130, HorizontalAlignment = HA.Left, Height = 25.0,
                Items = { EBDAlgorithm.EquallyDistributed, EBDAlgorithm.PartiallyDistributed }
             };
             mSelectedAlgorithm = (EBDAlgorithm)cmbox.SelectedIndex;
@@ -92,13 +91,13 @@ public partial class MainWindow : Window {
                mIsBent = false;
             };
             var fileName = mGeoReader.FileName;
-            var tBD = Math.Round (mProfile!.BendLines.Sum (bendline => bendline.BendDeduction), 3);
-            string[] infobox = { "FileName : ", "Sheet Size : ", "BendLines : ", "Algorithm : ", "Final Sheet Size : ", "Total Bend Deduction : " };
-            string[] infoboxvalue = { $"{Path.GetFileNameWithoutExtension(fileName)}{Path.GetExtension(fileName)}",
-                                          $"{mProfile.Bound.Width:F2} X {mProfile.Bound.Height:F2}",
-                                          $"{mProfile.BendLines.Count}", "",
+            var tBD = Math.Round (mPart!.BendLines.Sum (bendline => bendline.BendDeduction), 3);
+            string[] infobox = ["FileName : ", "Sheet Size : ", "BendLines : ", "Algorithm : ", "Final Sheet Size : ", "Total Bend Deduction : "];
+            string[] infoboxvalue = [ $"{Path.GetFileNameWithoutExtension(fileName)}{Path.GetExtension(fileName)}",
+                                          $"{mPart.Bound.Width:F2} X {mPart.Bound.Height:F2}",
+                                          $"{mPart.BendLines.Count}", "",
                                           "",
-                                          $"{tBD:F2}"};
+                                          $"{tBD:F2}"];
             unfGrid.Children.Clear ();
             for (int i = 0; i < infobox.Length; i++) {
                unfGrid.Children.Add (new TextBlock () { Text = infobox[i], Style = tbStyle, Margin = new Thickness (5) });
@@ -115,7 +114,8 @@ public partial class MainWindow : Window {
       menu.Items.Add (fileMenu);
       menuPanel.Children.Add (menu);
       var btnStyle = new Style ();
-      btnStyle.Setters.Add (new Setter (HeightProperty, 40.0));
+      btnStyle.Setters.Add (new Setter (WidthProperty, 100.0));
+      btnStyle.Setters.Add (new Setter (HeightProperty, 25.0));
       btnStyle.Setters.Add (new Setter (BackgroundProperty, Brushes.WhiteSmoke));
       btnStyle.Setters.Add (new Setter (MarginProperty, new Thickness (5.0)));
       btnStyle.Setters.Add (new Setter (HorizontalAlignmentProperty, HA.Left));
@@ -125,9 +125,9 @@ public partial class MainWindow : Window {
       borderStyle.Setters.Add (new Setter (Border.BorderThicknessProperty, new Thickness (5.0)));
       btnStyle.Resources = new ResourceDictionary { [typeof (Border)] = borderStyle };
       foreach (var name in Enum.GetNames (typeof (EOption))) {
-         var btn = new ToggleButton () {
-            Content = name,
-            ToolTip = name,
+         var btn = new Button () {
+            Content = name.AddSpace (),
+            Tag = name,
             Style = btnStyle,
          };
          btn.Click += OnOptionClicked;
@@ -158,43 +158,49 @@ public partial class MainWindow : Window {
       DockPanel.SetDock (optionPanel, Dock.Left);
       mMainPanel.Content = dp;
    }
+
    void OnOptionClicked (object sender, RoutedEventArgs e) {
-      if (sender is not ToggleButton btn || mViewport is null) return;
-      if (!Enum.TryParse ($"{btn.ToolTip}", out EOption opt)) return;
+      if (sender is not Button btn || mViewport is null) return;
+      if (!Enum.TryParse ($"{btn.Tag}", out EOption opt)) return;
       switch (opt) {
-         case EOption.MakeBendProfile:
-            if (mViewport is null || mBPM is null) return;
-            mBendProfile = mBPM.MakeBendProfile (mProfile, mSelectedAlgorithm);
-            mViewport.BendProfile = mBendProfile;
+         case EOption.BendDeduction:
+            if (mViewport is null) return;
+            var bd = new BendDeduction ();
+            mViewport.ProcessedPart = bd.ApplyBendDeduction (mPart, mSelectedAlgorithm);
             mUnfGrid.Children.OfType<TextBlock> ()
                     .FirstOrDefault (tb => tb.Tag is int tag && tag == 4)!
-                    .Text = $"{mBendProfile.Bound.Width:F2} X {mBendProfile.Bound.Height:F2}";
+                    .Text = $"{mProcessedPart.Bound.Width:F2} X {mProcessedPart.Bound.Height:F2}";
             mIsBent = true;
             break;
-         case EOption.CornerClosedProfile:
-            mViewport.BendProfile = new ();
-            CornerClosing mCornerClosing = new ();
-            var bp = mCornerClosing.MakeCornerClosing (mProfile);
-            mViewport.BendProfile = bp;
+         case EOption.BendRelief:
+            var br = new BendRelief ();
+            mViewport.ProcessedPart = br.ApplyBendRelief (mPart);
+            break;
+         case EOption.CornerClose:
+            var cc = new CornerClose ();
+            mViewport.ProcessedPart = cc.ApplyCornerClosing (mPart);
+            break;
+         case EOption.CornerRelief:
+            var cr = new CornerRelief (mPart);
+            mViewport.ProcessedPart = cr.ApplyCornerRelief ();
             break;
       }
-      mViewport.InvalidateVisual ();
+      mViewport.ZoomExtents ();
    }
    #endregion
 
    #region Private Data ---------------------------------------------
-   bool mIsBent = false, mIsSaved = false, mIsAlgorithmChanged = false;
+   bool mIsBent = false, mIsSaved = false;
    EBDAlgorithm mSelectedAlgorithm;
    UniformGrid mUnfGrid;
    Brush? mBGColor;
    Viewport? mViewport;
    GeoReader? mGeoReader;
    GeoWriter? mGeoWriter;
-   Profile mProfile;
-   BProfileMaker? mBPM;
-   BendProfile mBendProfile;
-
+   Part mPart;
+   BendDeduction? mBPM;
+   BendProcessedPart mProcessedPart;
    #endregion
 }
 
-public enum EOption { MakeBendProfile, CornerClosedProfile }
+public enum EOption { BendDeduction, BendRelief, CornerClose, CornerRelief }

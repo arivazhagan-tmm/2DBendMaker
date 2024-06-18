@@ -12,9 +12,9 @@ internal class Viewport : Canvas {
     #endregion
 
     #region Properties -----------------------------------------------
-    public Profile Profile { get => mProfile; set { mProfile = value; UpdateSnapPointsSource (); } }
-    public BendProfile BendProfile { get => mBendProfile; set { mBendProfile = value; UpdateBound (); UpdateSnapPointsSource (); } }
-    public bool HasBProfile => mBendProfile.Curves != null;
+    public Part Part { get => mPart; set { mPart = value; UpdateSnapPointsSource (); } }
+    public BendProcessedPart ProcessedPart { get => mProcessedPart; set { mProcessedPart = value; UpdateBound (); UpdateSnapPointsSource (); } }
+    public bool HasProcessedPart => mProcessedPart.Curves != null;
     #endregion
 
     #region Methods --------------------------------------------------
@@ -27,9 +27,8 @@ internal class Viewport : Canvas {
     #region Implementation -------------------------------------------
     void OnLoaded (object sender, RoutedEventArgs e) {
         Background = Brushes.Transparent;
-        mStartPt = mCurrentMousePt = new BPoint ();
+        mCurrentMousePt = new BPoint ();
         mDwgLineWeight = 1.0;
-        mDwgBrush = Brushes.ForestGreen;
         mBGPen = new (Brushes.Gray, 0.5);
         mDwgPen = new (Brushes.Black, mDwgLineWeight);
         mBLPen = new (Brushes.ForestGreen, 2.0) { DashStyle = DashStyles.DashDot };
@@ -42,7 +41,6 @@ internal class Viewport : Canvas {
         UpdateProjXform (mViewportBound);
 
         #region Attaching events --------------------------------------
-        MouseUp += OnMouseUp; ;
         MouseMove += OnMouseMove; ;
         MouseWheel += OnMouseWheel;
         #endregion
@@ -74,26 +72,24 @@ internal class Viewport : Canvas {
         InvalidateVisual ();
     }
 
-    void OnMouseUp (object sender, MouseButtonEventArgs e) { }
-
     protected override void OnRender (DrawingContext dc) {
         dc.DrawRectangle (Background, mBGPen, mViewportRect);
-        if (mProfile.Curves is null) return;
-        var v = new BVector (mProfile.Bound.MaxX + 5, 0);
-        foreach (var c in mProfile.Curves) {
+        if (mPart.PLines is null) return;
+        var v = new BVector (mPart.Bound.MaxX + 5, 0);
+        foreach (var c in mPart.PLines) {
             var (start, end) = (mProjXfm.Transform (ToWP (c.StartPoint)), mProjXfm.Transform (ToWP (c.EndPoint)));
             dc.DrawLine (mDwgPen, start, end);
         }
-        foreach (var bl in mProfile.BendLines) {
+        foreach (var bl in mPart.BendLines) {
             var (start, end) = (mProjXfm.Transform (ToWP (bl.StartPoint)), mProjXfm.Transform (ToWP (bl.EndPoint)));
             dc.DrawLine (mBLPen, start, end);
         }
-        if (HasBProfile) {
-            foreach (var c in mBendProfile.Curves) {
+        if (HasProcessedPart) {
+            foreach (var c in mProcessedPart.Curves) {
                 var (start, end) = (mProjXfm.Transform (ToWP (c.StartPoint.Translated (v))), mProjXfm.Transform (ToWP (c.EndPoint.Translated (v))));
                 dc.DrawLine (mDwgPen, start, end);
             }
-            foreach (var bl in mBendProfile.BendLines) {
+            foreach (var bl in mProcessedPart.BendLines) {
                 var (start, end) = (mProjXfm.Transform (ToWP (bl.StartPoint.Translated (v))), mProjXfm.Transform (ToWP (bl.EndPoint.Translated (v))));
                 dc.DrawLine (mBLPen, start, end);
             }
@@ -109,21 +105,21 @@ internal class Viewport : Canvas {
     }
 
     void UpdateBound () {
-        var pts = mProfile.Vertices;
-        var v = new BVector (mProfile.Bound.MaxX + 5, 0);
-        if (HasBProfile)
-            pts.AddRange (mBendProfile.Vertices.Select (a => a.Translated (v)));
+        var pts = mPart.Vertices;
+        var v = new BVector (mPart.Bound.MaxX + 5, 0);
+        if (HasProcessedPart)
+            pts.AddRange (mProcessedPart.Vertices.Select (a => a.Translated (v)));
         UpdateProjXform (new Bound (pts.ToArray ()));
     }
 
     void UpdateSnapPointsSource () {
-        if (mProfile.Vertices != null) {
+        if (mPart.Vertices != null) {
             mSnapSource ??= [];
-            mSnapSource.AddRange (mProfile.Vertices);
+            mSnapSource.AddRange (mPart.Vertices);
         }
-        if (mBendProfile.Vertices != null) {
+        if (mProcessedPart.Vertices != null) {
             mSnapSource ??= [];
-            mSnapSource.AddRange (mBendProfile.Vertices);
+            mSnapSource.AddRange (mProcessedPart.Vertices);
         }
     }
 
@@ -150,13 +146,12 @@ internal class Viewport : Canvas {
     Bound mViewportBound;
     Point mViewportCenter;
     Matrix mProjXfm, mInvProjXfm;
-    BPoint mCurrentMousePt, mStartPt, mSnapPoint;
-    Pen? mBLPen, mBGPen, mDwgPen, mRemnantPen;
-    Brush? mDwgBrush;
+    BPoint mCurrentMousePt, mSnapPoint;
+    Pen? mBLPen, mBGPen, mDwgPen;
     TextBlock? mCords;
-    Profile mProfile;
-    BendProfile mBendProfile;
-    List<BPoint> mSnapSource;
+    Part mPart;
+    BendProcessedPart mProcessedPart;
+    List<BPoint>? mSnapSource;
     ToolTip mToolTip;
     #endregion
 }

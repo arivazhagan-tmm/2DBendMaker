@@ -7,6 +7,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>false</UseWindowsForms>
+    <ApplicationIcon>Data/Icon.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="FileHandling\" />
+    <Folder Include="BendAssists\" />
+    <Folder Include="Utils\" />
+  </ItemGroup>
 
 </Project>

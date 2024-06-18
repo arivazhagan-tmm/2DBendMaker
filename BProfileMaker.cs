@@ -1,4 +1,6 @@
-﻿namespace BendMaker;
+﻿using System.Windows.Controls;
+
+namespace BendMaker;
 
 #region class BProfileMaker -----------------------------------------------------------------------
 public class BProfileMaker {
@@ -48,7 +50,8 @@ public class BProfileMaker {
                   var conCurve = mProfile.Curves.Where (cC => cC.Index == idx).First ();
                   var trimmed = conCurve.StartPoint.Y < c.StartPoint.Y ? conCurve.Trimmed (0, 0, 0, -totalBD)
                                                                        : conCurve.Trimmed (0, -totalBD, 0, 0);
-                  tempCurves.Add (trimmed);
+                  if (bottomBLines.Count == 0) newCurves.Add (trimmed);
+                  else tempCurves.Add (trimmed);
                }
             } else {
                newCurves.Add (c.Translated (dx, dy));
@@ -56,10 +59,12 @@ public class BProfileMaker {
                   var conCurve = mProfile.Curves.Where (cC => cC.Index == idx).First ();
                   var trimmed = conCurve.StartPoint.X < c.StartPoint.X ? conCurve.Trimmed (0, 0, -totalBD, 0)
                                                                        : conCurve.Trimmed (-totalBD, 0, 0, 0);
-                  tempCurves.Add (trimmed);
+                  if (bottomBLines.Count == 0) newCurves.Add (trimmed);
+                  else tempCurves.Add (trimmed);
                }
             }
          }
+         if (bottomBLines.Count == 0) newCurves.Add (mProfile.Curves.Except (tempCurves).First ()); // Incase of a single bend line part
 
          newBendLines.AddRange (GetTranslatedBLines (bottomBLines, out totalBD, out horBLCount, out verBLCount));
          foreach (var c in GetProfileCurves (mProfile, EBLLocation.Bottom, verBLCount > 0, horBLCount > 0)) {
@@ -118,7 +123,6 @@ public class BProfileMaker {
             verCount += 1;
             (dx, dy) = (offset, 0.0);
          }
-         //var (dx, dy) = orient is EBLOrientation.Horizontal ? (0.0, offset) : (offset, 0.0);
          totalBD += bd;
          newBendLines.Add (bl.Translated (dx, dy));
       }
@@ -128,14 +132,14 @@ public class BProfileMaker {
    List<Curve> GetProfileCurves (Profile pf, EBLLocation loc, bool HasVerBLine, bool HasHorBLine) {
       var b = pf.Bound;
       List<Curve> alignedCurves = [];
-      if (HasVerBLine) { // Handles vertical bend lines and gives 
+      if (HasVerBLine) { // Handles vertical bend lines and returns nearest vertical curve 
          alignedCurves.Add (pf.Curves.Where (c => loc is EBLLocation.Top ? c.StartPoint.X == b.MaxX && c.EndPoint.X == b.MaxX
                                                                          : c.StartPoint.X == b.MinX && c.EndPoint.X == b.MinX).First ());
       }
 
-      if (HasHorBLine) {
+      if (HasHorBLine) { // Handles horizontal bend lines and returns nearest horizontal curve 
          alignedCurves.Insert (0, pf.Curves.Where (c => loc is EBLLocation.Top ? c.StartPoint.Y == b.MaxY && c.EndPoint.Y == b.MaxY
-                                                             : c.StartPoint.Y == b.MinY && c.EndPoint.Y == b.MinY).First ());
+                                                                               : c.StartPoint.Y == b.MinY && c.EndPoint.Y == b.MinY).First ());
       }
       return alignedCurves;
    }

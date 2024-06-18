@@ -52,7 +52,7 @@ public class BProfileMaker {
                }
             } else {
                newCurves.Add (c.Translated (dx, dy));
-               foreach (var idx in BendUtils.GetCCIndices(c, mProfile.Curves)) {
+               foreach (var idx in BendUtils.GetCCIndices (c, mProfile.Curves)) {
                   var conCurve = mProfile.Curves.Where (cC => cC.Index == idx).First ();
                   var trimmed = conCurve.StartPoint.X < c.StartPoint.X ? conCurve.Trimmed (0, 0, -totalBD, 0)
                                                                        : conCurve.Trimmed (-totalBD, 0, 0, 0);
@@ -68,7 +68,13 @@ public class BProfileMaker {
             if (angle is 0 or 180) {
                newCurves.Add (c.Translated (dx, dy));
                foreach (var idx in BendUtils.GetCCIndices (c, mProfile.Curves)) {
-                  var conCurve = tempCurves.Where (tC => tC.Index == idx).First ();
+                  Curve conCurve = new ();
+                  if (tempCurves.Any (tC => tC.Index == idx)) {
+                     conCurve = tempCurves.Where (tC => tC.Index == idx).First ();
+                  } else {
+                     conCurve = mProfile.Curves.Where (pC => pC.Index == idx).First ();
+                     foreach (var tC in tempCurves) newCurves.Add (tC);
+                  }
                   var trimmed = conCurve.StartPoint.Y > c.StartPoint.Y ? conCurve.Trimmed (0, 0, 0, totalBD)
                                                                        : conCurve.Trimmed (0, totalBD, 0, 0);
                   newCurves.Add (trimmed);
@@ -76,7 +82,13 @@ public class BProfileMaker {
             } else {
                newCurves.Add (c.Translated (dx, dy));
                foreach (var idx in BendUtils.GetCCIndices (c, mProfile.Curves)) {
-                  var conCurve = tempCurves.Where (tC => tC.Index == idx).First ();
+                  Curve conCurve = new ();
+                  if (tempCurves.Any (tC => tC.Index == idx)) {
+                     conCurve = tempCurves.Where (tC => tC.Index == idx).First ();
+                  } else {
+                     conCurve = mProfile.Curves.Where (pC => pC.Index == idx).First ();
+                     foreach (var tC in tempCurves) newCurves.Add (tC);
+                  }
                   var trimmed = conCurve.StartPoint.X > c.StartPoint.X ? conCurve.Trimmed (0, 0, totalBD, 0)
                                                                        : conCurve.Trimmed (totalBD, 0, 0, 0);
                   newCurves.Add (trimmed);
@@ -113,7 +125,7 @@ public class BProfileMaker {
       return newBendLines;
    }
 
-   List<Curve> GetProfileCurves (Profile pf, EBLLocation loc, bool HasVerBLine, bool HasHorBLine) { 
+   List<Curve> GetProfileCurves (Profile pf, EBLLocation loc, bool HasVerBLine, bool HasHorBLine) {
       var b = pf.Bound;
       List<Curve> alignedCurves = [];
       if (HasVerBLine) { // Handles vertical bend lines and gives 
@@ -142,9 +154,11 @@ public enum EBLOrientation { Inclined, Horizontal, Vertical }
 
 public enum ECurve { Line, Arc, Spline }
 
+public enum ECurveOrientation { Inclined, Horizontal, Vertical }
+
 public enum ELineType { Solid, Dashed }
 
-public enum EBDAlgorithm { EquallyDistributed, PartiallyDistributed }
+public enum EBDAlgorithm { EquallyDistributed, PartiallyDistributed, Unknown }
 
 public enum EBLLocation { Top, Bottom }
 #endregion

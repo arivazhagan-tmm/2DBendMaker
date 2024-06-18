@@ -7,6 +7,7 @@ public struct Curve {
       (mCurvePoints, mCurveType, mIndex) = (points, curveType, index);
       (mStartPt, mEndPt) = (points[0], points[^1]);
       mTag = tag;
+      UpdateOrientation ();
    }
    #endregion
 
@@ -15,9 +16,11 @@ public struct Curve {
    public readonly BPoint EndPoint => mEndPt;
    public readonly ELineType LineType => mLineType;
    public readonly ECurve CurveType => mCurveType;
+   public readonly ECurveOrientation Orientation => mOrientation;
    public string Tag => mTag ??= "";
    public int Index { get => mIndex; set => mIndex = value; }
    public int[] CCIndices { get => mConnectedCurveIndices ??= []; private set => mConnectedCurveIndices = value; }
+   public readonly double Length => mStartPt.DistanceTo (mEndPt);
    #endregion
 
    #region Methods --------------------------------------------------
@@ -38,16 +41,26 @@ public struct Curve {
    public void SetCCIndices (int[] indices) => mConnectedCurveIndices = indices;
 
    public override string ToString () => $"{mIndex}, {mStartPt}, {mEndPt}";
+
+   void UpdateOrientation () {
+      var theta = mStartPt.AngleTo (mEndPt);
+
+      if (theta is 0.0 or 180.0) mOrientation = ECurveOrientation.Horizontal;
+      else if (theta is 90.0 or 270.0) mOrientation = ECurveOrientation.Vertical;
+      else mOrientation = ECurveOrientation.Inclined;
+   }
    #endregion
 
    #region Private Data ---------------------------------------------
    BPoint[]? mCurvePoints;
    BPoint mStartPt, mEndPt;
    ECurve mCurveType;
+   ECurveOrientation mOrientation;
    ELineType mLineType;
    string? mTag;
    int mIndex;
    int[]? mConnectedCurveIndices;
+   double mLength;
    #endregion
 }
 #endregion

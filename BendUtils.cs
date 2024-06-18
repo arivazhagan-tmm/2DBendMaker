@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Text.RegularExpressions;
+using System.Windows;
 using System.Windows.Media;
 
 
@@ -49,5 +50,10 @@ static public class BendUtils {
             area += vertices[i].X * vertices[i + 1].Y - vertices[i].Y * vertices[i + 1].X;
         area += vertices[n - 1].X * vertices[0].Y - vertices[n - 1].Y * vertices[0].X;
         return Math.Abs (area) / 2;
+    }
+
+    public static string AddSpace (this string str) {
+        var result = Regex.Split (str, @"(?=[A-Z])");
+        return string.Join (" ", result);
     }
 }

@@ -82,27 +82,17 @@ public partial class MainWindow : Window {
                 tbStyle.Setters.Add (new Setter (MarginProperty, new Thickness (5, 5, 0, 0)));
                 tbStyle.Setters.Add (new Setter (HorizontalAlignmentProperty, HA.Left));
                 tbStyle.Setters.Add (new Setter (VerticalAlignmentProperty, VA.Top));
-                var cmbox = new ComboBox () {
-                    SelectedIndex = 0, Width = 130, HorizontalAlignment = HA.Left,
-                    Items = { EBDAlgorithm.EquallyDistributed, EBDAlgorithm.PartiallyDistributed }
-                };
-                mSelectedAlgorithm = (EBDAlgorithm)cmbox.SelectedIndex;
-                cmbox.SelectionChanged += (s, e) => {
-                    mSelectedAlgorithm = (EBDAlgorithm)cmbox.SelectedIndex;
-                    mIsBent = false;
-                };
                 var fileName = mGeoReader.FileName;
                 var tBD = Math.Round (mProfile!.BendLines.Sum (bendline => bendline.BendDeduction), 3);
-                string[] infobox = { "FileName : ", "Sheet Size : ", "BendLines : ", "Algorithm : ", "Final Sheet Size : ", "Total Bend Deduction : " };
+                string[] infobox = { "FileName : ", "Sheet Size : ", "BendLines : ", "Final Sheet Size : ", "Total Bend Deduction : " };
                 string[] infoboxvalue = { $"{Path.GetFileNameWithoutExtension(fileName)}{Path.GetExtension(fileName)}",
                                           $"{mProfile.Bound.Width:F2} X {mProfile.Bound.Height:F2}",
                                           $"{mProfile.BendLines.Count}", "",
-                                          "",
                                           $"{tBD:F2}"};
                 unfGrid.Children.Clear ();
                 for (int i = 0; i < infobox.Length; i++) {
                     unfGrid.Children.Add (new TextBlock () { Text = infobox[i], Style = tbStyle, Margin = new Thickness (5) });
-                    unfGrid.Children.Add (i == 3 ? cmbox : new TextBlock () { Tag = i, Text = infoboxvalue[i], Style = tbStyle, Margin = new Thickness (5) });
+                    unfGrid.Children.Add (new TextBlock () { Tag = i, Text = infoboxvalue[i], Style = tbStyle, Margin = new Thickness (5) });
                 }
                 if (!optionPanel.Children.Contains (unfGrid)) {
                     mUnfGrid = unfGrid;
@@ -126,9 +116,10 @@ public partial class MainWindow : Window {
         btnStyle.Resources = new ResourceDictionary { [typeof (Border)] = borderStyle };
         foreach (var name in Enum.GetNames (typeof (EOption))) {
             var btn = new ToggleButton () {
-                Content = name,
+                Content = name.AddSpace (),
                 ToolTip = name,
                 Style = btnStyle,
+                Width = 102
             };
             btn.Click += OnOptionClicked;
             optionPanel.Children.Add (btn);
@@ -163,12 +154,12 @@ public partial class MainWindow : Window {
             if (sender is not ToggleButton btn || mViewport is null) return;
             if (!Enum.TryParse ($"{btn.ToolTip}", out EOption opt)) return;
             switch (opt) {
-                case EOption.MakeBendProfile:
+                case EOption.BendDeduction:
                     if (mViewport is null || mBPM is null) return;
-                    mBendProfile = mBPM.MakeBendProfile (mProfile, mSelectedAlgorithm);
+                    mBendProfile = mBPM.MakeBendProfile (mProfile, EBDAlgorithm.EquallyDistributed);
                     mViewport.BendProfile = mBendProfile;
                     mUnfGrid.Children.OfType<TextBlock> ()
-                            .FirstOrDefault (tb => tb.Tag is int tag && tag == 4)!
+                            .FirstOrDefault (tb => tb.Tag is int tag && tag == 3)!
                             .Text = $"{mBendProfile.Bound.Width:F2} X {mBendProfile.Bound.Height:F2}";
                     mViewport.InvalidateVisual ();
                     mIsBent = true;
@@ -179,8 +170,7 @@ public partial class MainWindow : Window {
     #endregion
 
     #region Private Data ---------------------------------------------
-    bool mIsBent = false, mIsSaved = false, mIsAlgorithmChanged = false;
-    EBDAlgorithm mSelectedAlgorithm;
+    bool mIsBent = false, mIsSaved = false;
     UniformGrid mUnfGrid;
     Brush? mBGColor;
     Viewport? mViewport;
@@ -192,4 +182,4 @@ public partial class MainWindow : Window {
     #endregion
 }
 
-public enum EOption { MakeBendProfile }
+public enum EOption { BendDeduction, CornerClosing, CornerRelief, BendRelief }

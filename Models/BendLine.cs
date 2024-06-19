@@ -13,6 +13,8 @@ public struct BendLine {
       (mStartPt, mEndPt, mBendDeduction) = (startPt, endPt, bendDeduction);
       UpdateOrientation ();
    }
+
+   public BendLine (BPoint startPt, BPoint endPt) => (mStartPt, mEndPt) = (startPt, endPt);
    #endregion
 
    #region Properties -----------------------------------------------
@@ -23,7 +25,7 @@ public struct BendLine {
    #endregion
 
    #region Methods --------------------------------------------------
-   public BendLine Clone() => new (mStartPt, mEndPt, mBendDeduction);
+   public BendLine Clone () => new (mStartPt, mEndPt, mBendDeduction);
 
    public BendLine Translated (double dx, double dy) {
       var v = new BVector (dx, dy);

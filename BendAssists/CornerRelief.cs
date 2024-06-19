@@ -1,5 +1,6 @@
 ﻿namespace BendMaker;
 
+#region class CornerRelief -------------------------------------------------------------------------
 public class CornerRelief (Part part) {
 
    #region Methods --------------------------------------------------
@@ -28,7 +29,7 @@ public class CornerRelief (Part part) {
       }
 
       UpdatedVertices ();
-      return new BendProcessedPart (EBDAlgorithm.PartiallyDistributed, UpdatedPLines (), mOrgBp.BendLines);
+      return new BendProcessedPart (EBDAlgorithm.PartiallyDistributed, UpdatedPLines (), mOrgBp.BendLines, true);
    }
 
    public (int, List<BPoint>) GetCommonBendPoints (BPoint point, int i) {
@@ -157,3 +158,4 @@ public class CornerRelief (Part part) {
    List<List<BPoint>> mOrgCurves = new ();
    #endregion
 }
+#endregion

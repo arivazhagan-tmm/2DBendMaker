@@ -166,7 +166,7 @@ public partial class MainWindow : Window {
          case EOption.BendDeduction:
             if (mViewport is null) return;
             var bd = new BendDeduction ();
-            mViewport.ProcessedPart = bd.ApplyBendDeduction (mPart, mSelectedAlgorithm);
+            mProcessedPart = mViewport.ProcessedPart = bd.ApplyBendDeduction (mPart, mSelectedAlgorithm);
             mUnfGrid.Children.OfType<TextBlock> ()
                     .FirstOrDefault (tb => tb.Tag is int tag && tag == 4)!
                     .Text = $"{mProcessedPart.Bound.Width:F2} X {mProcessedPart.Bound.Height:F2}";
@@ -174,15 +174,15 @@ public partial class MainWindow : Window {
             break;
          case EOption.BendRelief:
             var br = new BendRelief ();
-            mViewport.ProcessedPart = br.ApplyBendRelief (mPart);
+            mProcessedPart = mViewport.ProcessedPart = br.ApplyBendRelief (mPart);
             break;
          case EOption.CornerClose:
             var cc = new CornerClose ();
-            mViewport.ProcessedPart = cc.ApplyCornerClosing (mPart);
+            mProcessedPart = mViewport.ProcessedPart = cc.ApplyCornerClosing (mPart);
             break;
          case EOption.CornerRelief:
             var cr = new CornerRelief (mPart);
-            mViewport.ProcessedPart = cr.ApplyCornerRelief ();
+            mProcessedPart = mViewport.ProcessedPart = cr.ApplyCornerRelief ();
             break;
       }
       mViewport.ZoomExtents ();

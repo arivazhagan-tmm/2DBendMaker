@@ -106,7 +106,7 @@ public class CornerClose {
             }
          }
       }
-      return new BendProcessedPart (EBDAlgorithm.Unknown, mNewCurves, profile.BendLines);
+      return new BendProcessedPart (EBDAlgorithm.Unknown, mNewCurves, profile.BendLines, true);
    }
    #endregion
 

@@ -8,6 +8,7 @@ public struct PLine {
       (mStartPt, mEndPt) = (points[0], points[^1]);
       UpdateOrientation ();
    }
+   public PLine (BPoint startPt, BPoint endPt) => (mStartPt, mEndPt) = (startPt, endPt);
    #endregion
 
    #region Properties -----------------------------------------------

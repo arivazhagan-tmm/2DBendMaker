@@ -1,13 +1,18 @@
 ﻿namespace BendMaker;
-internal class CornerClosing {
-   public CornerClosing () { }
 
+#region class CornerClosing ------------------------------------------------------------------------
+public class CornerClosing {
+   #region Constructor -----------------------------------------------
+   public CornerClosing () { }
+   #endregion
+
+   #region Method --------------------------------------------------
    public BendProfile MakeCornerClosing (Profile profile) {
       var vertices = profile.Vertices; var curves = profile.Curves;
       var halfBA = BendUtils.GetBendAllowance (90, 0.38, 2, 2) / 2;
       var curveShift = halfBA - 2;
       var halfBD = BendUtils.GetBendDeduction (90, 0.38, 2, 2) / 2;
-      var repeatedPoints = vertices.GroupBy (p => p).Where (p => p.Count () > 1).Select (g => g.Key).ToList ();
+      var repeatedPoints = vertices.GroupBy (p => p).Where (p => p.Count () > 2).Select (g => g.Key).ToList ();
       foreach (var curve in curves)
          if (repeatedPoints.Contains (curve.StartPoint) || repeatedPoints.Contains (curve.EndPoint)) mStepCurves.Add (curve);
          else mEdgeCurves.Add (curve);
@@ -84,7 +89,6 @@ internal class CornerClosing {
                   mNewCurves.Add (new Curve (ECurve.Line, ++index, "", trimmedCurve.EndPoint, extrudedCurve.StartPoint));
                   extrudedCurve.Index = ++index;
                   mNewCurves.Add (extrudedCurve);
-
                } else if (curve.Orientation is ECurveOrientation.Vertical) {
                   if (curve.StartPoint.Y < profile.Centroid.Y) {
                      extrudedCurve = curve.Trimmed (0, -halfBA, 0, 0).Translated (-halfBD, 0);
@@ -104,17 +108,24 @@ internal class CornerClosing {
       }
       return new BendProfile (EBDAlgorithm.Unknown, mNewCurves, profile.BendLines);
    }
+   #endregion
 
+   #region Implementation --------------------------------------------
    List<BPoint> GetStartPoints (List<Curve> curves, List<BPoint> bPoints) {
       foreach (Curve curve in curves) bPoints.Add (curve.StartPoint);
       return bPoints;
    }
+
    List<BPoint> GetEndPoints (List<Curve> curves, List<BPoint> bPoints) {
       foreach (Curve curve in curves) bPoints.Add (curve.EndPoint);
       return bPoints;
    }
+   #endregion
 
+   #region Private ---------------------------------------------------
    List<Curve> mStepCurves = [], mEdgeCurves = [], mNewCurves = [];
    List<BPoint> mStepStartPts = [], mStepEndPts = [];
    int index = -1;
+   #endregion
 }
+#endregion

@@ -2,51 +2,54 @@
 
 #region struct BendLine ---------------------------------------------------------------------------
 public struct BendLine {
-   #region Constructors ---------------------------------------------
-   public BendLine (BPoint startPt, BPoint endPt, double angle, double radius, double thickness, double kFactor) {
-      (mStartPt, mEndPt) = (startPt, endPt);
-      mBendDeduction = BendUtils.GetBendDeduction (angle, kFactor, thickness, radius);
-      UpdateOrientation ();
-   }
+    #region Constructors ---------------------------------------------
+    public BendLine (BPoint startPt, BPoint endPt, double angle, double radius, double thickness, double kFactor) {
+        (mStartPt, mEndPt) = (startPt, endPt);
+        mBendDeduction = BendUtils.GetBendDeduction (angle, kFactor, thickness, radius);
+        UpdateOrientation ();
+    }
 
-   public BendLine (BPoint startPt, BPoint endPt, double bendDeduction) {
-      (mStartPt, mEndPt, mBendDeduction) = (startPt, endPt, bendDeduction);
-      UpdateOrientation ();
-   }
-   #endregion
+    public BendLine (BPoint startPt, BPoint endPt, double bendDeduction) {
+        (mStartPt, mEndPt, mBendDeduction) = (startPt, endPt, bendDeduction);
+        UpdateOrientation ();
+    }
 
-   #region Properties -----------------------------------------------
-   public BPoint StartPoint => mStartPt;
-   public BPoint EndPoint => mEndPt;
-   public double BendDeduction => mBendDeduction;
-   public EBLOrientation Orientation => mOrientation;
-   #endregion
+    public BendLine (BPoint startPt, BPoint endPt) => (mStartPt, mEndPt) = (startPt, endPt);
 
-   #region Methods --------------------------------------------------
-   public BendLine Clone() => new (mStartPt, mEndPt, mBendDeduction);
+    #endregion
 
-   public BendLine Translated (double dx, double dy) {
-      var v = new BVector (dx, dy);
-      return new (mStartPt.Translated (v), mEndPt.Translated (v), mBendDeduction);
-   }
+    #region Properties -----------------------------------------------
+    public BPoint StartPoint => mStartPt;
+    public BPoint EndPoint => mEndPt;
+    public double BendDeduction => mBendDeduction;
+    public EBLOrientation Orientation => mOrientation;
+    #endregion
 
-   public override string ToString () => $"{mStartPt}, {mEndPt}";
-   #endregion
+    #region Methods --------------------------------------------------
+    public BendLine Clone () => new (mStartPt, mEndPt, mBendDeduction);
 
-   #region Implementation -------------------------------------------
-   void UpdateOrientation () {
-      var theta = mStartPt.AngleTo (mEndPt);
-      if (theta is 0.0 or 180.0) mOrientation = EBLOrientation.Horizontal;
-      else if (theta is 90.0 or 270.0) mOrientation = EBLOrientation.Vertical;
-      else mOrientation = EBLOrientation.Inclined;
-   }
+    public BendLine Translated (double dx, double dy) {
+        var v = new BVector (dx, dy);
+        return new (mStartPt.Translated (v), mEndPt.Translated (v), mBendDeduction);
+    }
 
-   #endregion
+    public override string ToString () => $"{mStartPt}, {mEndPt}";
+    #endregion
 
-   #region Private Data ---------------------------------------------
-   readonly double mBendDeduction;
-   readonly BPoint mStartPt, mEndPt;
-   EBLOrientation mOrientation;
-   #endregion
+    #region Implementation -------------------------------------------
+    void UpdateOrientation () {
+        var theta = mStartPt.AngleTo (mEndPt);
+        if (theta is 0.0 or 180.0) mOrientation = EBLOrientation.Horizontal;
+        else if (theta is 90.0 or 270.0) mOrientation = EBLOrientation.Vertical;
+        else mOrientation = EBLOrientation.Inclined;
+    }
+
+    #endregion
+
+    #region Private Data ---------------------------------------------
+    readonly double mBendDeduction;
+    readonly BPoint mStartPt, mEndPt;
+    EBLOrientation mOrientation;
+    #endregion
 }
 #endregion

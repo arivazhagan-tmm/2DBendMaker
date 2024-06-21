@@ -178,11 +178,13 @@ public partial class MainWindow : Window {
             break;
          case EOption.CornerClose:
             var cc = new CornerClose ();
-            mProcessedPart = mViewport.ProcessedPart = cc.ApplyCornerClosing (mPart);
+            if (cc.ApplyCornerClosing (mPart, out mProcessedPart))
+               mViewport.ProcessedPart = mProcessedPart;
             break;
          case EOption.CornerRelief:
             var cr = new CornerRelief (mPart);
-            mProcessedPart = mViewport.ProcessedPart = cr.ApplyCornerRelief ();
+            if (cr.ApplyCornerRelief (out mProcessedPart))
+               mViewport.ProcessedPart = mProcessedPart;
             break;
       }
       mViewport.ZoomExtents ();

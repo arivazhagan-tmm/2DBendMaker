@@ -1,161 +1,184 @@
 ﻿namespace BendMaker;
 
-#region class CornerRelief -------------------------------------------------------------------------
+#region class CornerRelief ------------------------------------------------------------------------
 public class CornerRelief (Part part) {
 
+   #region Properties -----------------------------------------------
+   public static string ErrorMessage => "No bend line intersection exists";
+   #endregion
+
+   /// <summary>Create a V-Notch corner relief for the intersection of the bend lines.</summary>
+   /// <param name="part">The bend processed part.</param>
+   /// <returns> Return values:
+   /// true: The new BendProcessPart object is sent, and also a preview of the part before
+   /// and after corner relief shown in the UI.
+   /// false: It send an error message to the user.
+   /// </returns>
    #region Methods --------------------------------------------------
-   public BendProcessedPart ApplyCornerRelief () {
+   public bool ApplyCornerRelief (out BendProcessedPart part) {
+      if (mOrgBp.BendLines.Count >= 2) {
+         for (int i = 0; i < mOrgBp.BendLines.Count - 1; i++) {
+            var start = GetCommonBendPoints (mOrgBp.BendLines[i].StartPoint, i);
+            if (start.repeatedPoints > 0) mCommonBendPoints.Add (start.cPoint);
+            var end = GetCommonBendPoints (mOrgBp.BendLines[i].EndPoint, i);
+            if (end.repeatedPoints > 0) mCommonBendPoints.Add (end.cPoint);
+         }
+      }
+      if (mCommonBendPoints.Count == 0) {
+         part = new BendProcessedPart (EBDAlgorithm.PartiallyDistributed, mOrgBp.PLines, mOrgBp.BendLines);
+         return false;
+      }
       if (mOrgBp.PLines.Count > 0) {
          foreach (var point in mOrgBp.PLines) {
-            mCurvesStartPts.Add (point.StartPoint);
-            mCurvesEndPts.Add (point.EndPoint);
+            mPlinesStartPts.Add (point.StartPoint);
+            mPlinesEndPts.Add (point.EndPoint);
+         }
+         for (int i = 0; i < mCommonBendPoints.Count; i++) {
+            if (mPlinesStartPts.Contains (mCommonBendPoints[i]))
+               mCommonBendAndPlinesPts.Add (mCommonBendPoints[i]);
+            else if (mPlinesEndPts.Contains (mCommonBendPoints[i]))
+               mCommonBendAndPlinesPts.Add (mCommonBendPoints[i]);
          }
       }
-
-      if (mOrgBp.BendLines.Count >= 2) {
-         for (int i = 0, j = 0; i < mOrgBp.BendLines.Count - 1; i++) {
-            var a = GetCommonBendPoints (mOrgBp.BendLines[i].StartPoint, i);
-            if (a.Item2.Count > 0) mCommonBendPoints.Add (j++, a.Item2);
-            var b = GetCommonBendPoints (mOrgBp.BendLines[i].EndPoint, i);
-            if (b.Item2.Count > 0) mCommonBendPoints.Add (j++, b.Item2);
-         }
-      }
-
-
-      for (int i = 0; i < mCommonBendPoints.Count; i++) {
-         var a = mCommonBendPoints[i];
-         if (mCurvesStartPts.Contains (a[0])) mCommonBendAndCurvePts.Add (a[0]);
-         else if (mCurvesEndPts.Contains (a[0])) mCommonBendAndCurvePts.Add (a[0]);
-      }
-
       UpdatedVertices ();
-      return new BendProcessedPart (EBDAlgorithm.PartiallyDistributed, UpdatedPLines (), mOrgBp.BendLines, true);
+      part = new BendProcessedPart (EBDAlgorithm.PartiallyDistributed, UpdatedPLines (), mOrgBp.BendLines);
+      return true;
    }
 
-   public (int, List<BPoint>) GetCommonBendPoints (BPoint point, int i) {
-      List<BPoint> tempBL = new ();
-      int j = i, k = i;
-      while (++j < mOrgBp.BendLines.Count) {
-         if (point == mOrgBp.BendLines[++k].StartPoint && !mTempBPoints.Contains (point))
-            tempBL.Add (point);
-         if (point == mOrgBp.BendLines[k].EndPoint && !mTempBPoints.Contains (point))
-            tempBL.Add (point);
+   /// <summary>Find a common point between the two bend lines.</summary>
+   /// <param name="point">The point value of a bend line,whether it's starting or ending.</param>
+   /// <param name="index">Index value for the list of bend lines.</param>
+   /// <returns>Return values:
+   ///  0,new BPoint(): When the size of  tempBPoint is equal to zero.
+   ///  x,tempBPoint[0]: If tempBPoint is larger than zero and returns the first
+   ///  index value in a list. Here, 'x' is a natural number.
+   /// </returns>
+   (int repeatedPoints, BPoint cPoint) GetCommonBendPoints (BPoint point, int index) {
+      List<BPoint> tempBPoint = new ();
+      while (++index < mOrgBp.BendLines.Count) {
+         if (point == mOrgBp.BendLines[index].StartPoint) tempBPoint.Add (point);
+         if (point == mOrgBp.BendLines[index].EndPoint) tempBPoint.Add (point);
       }
-      if (!mTempBPoints.Contains (point)) mTempBPoints.Add (point);
-      return (tempBL.Count, tempBL);
+      if (tempBPoint.Count == 0) return (0, new BPoint ());
+      return (tempBPoint.Count, tempBPoint[0]);
    }
    #endregion
 
    #region Implementation -------------------------------------------
+   /// <summary>Find a point that is 45 degrees from a common point for both the bend lines
+   /// and the plines.</summary>
+   /// <returns>It generates a list of bpoint.</returns>
    List<BPoint> UpdatedVertices () {
       Dictionary<BPoint, List<BPoint>> commonPointAndBendLines = new ();
-      mBendAllowance = BendUtils.GetBendAllowance (90, 0.38, 2, 2); //Material 1.0038
-      for (int i = 0; i < mCommonBendAndCurvePts.Count; i++) {
+      mBendAllowance = Math.Round (BendUtils.GetBendAllowance (90, 0.38, 2, 2), 3); // Material 1.0038
+      for (int i = 0; i < mCommonBendAndPlinesPts.Count; i++) {
          List<BPoint> tempBPoint = new ();
-         foreach (var a in mOrgBp.BendLines) {
-            if (a.StartPoint == mCommonBendAndCurvePts[i]) tempBPoint.Add (a.EndPoint);
-            if (a.EndPoint == mCommonBendAndCurvePts[i]) tempBPoint.Add (a.StartPoint);
+         foreach (var pLine in mOrgBp.BendLines) {
+            if (pLine.StartPoint == mCommonBendAndPlinesPts[i]) tempBPoint.Add (pLine.EndPoint);
+            if (pLine.EndPoint == mCommonBendAndPlinesPts[i]) tempBPoint.Add (pLine.StartPoint);
          }
-         commonPointAndBendLines.Add (mCommonBendAndCurvePts[i], tempBPoint);
+         commonPointAndBendLines.Add (mCommonBendAndPlinesPts[i], tempBPoint);
       }
-
-      for (int i = 0; i < mCommonBendAndCurvePts.Count; i++) {
-         var point = mCommonBendAndCurvePts[i];
-         List<BPoint> bpoint = commonPointAndBendLines[point];
-         double x = 0, y = 0;
-
-         if (point.X < Math.Abs (bpoint[1].X - bpoint[0].X)) x = point.X + Math.Round ((mBendAllowance / 2), 3);
-         else x = point.X - Math.Round ((mBendAllowance / 2), 3);
-
-         if (point.Y < Math.Abs (bpoint[1].Y - bpoint[0].Y)) y = point.Y + Math.Round ((mBendAllowance / 2), 3);
-         else y = point.Y - Math.Round ((mBendAllowance / 2), 3);
-
+      for (int i = 0; i < mCommonBendAndPlinesPts.Count; i++) {
+         List<BPoint> bendLinePoints = commonPointAndBendLines[mCommonBendAndPlinesPts[i]];
+         double x, y;
+         if (mCommonBendAndPlinesPts[i].X < Math.Abs (bendLinePoints[1].X - bendLinePoints[0].X))
+            x = mCommonBendAndPlinesPts[i].X + Math.Round (mBendAllowance / 2, 3);
+         else x = mCommonBendAndPlinesPts[i].X - Math.Round (mBendAllowance / 2, 3);
+         if (mCommonBendAndPlinesPts[i].Y < Math.Abs (bendLinePoints[1].Y - bendLinePoints[0].Y))
+            y = mCommonBendAndPlinesPts[i].Y + Math.Round (mBendAllowance / 2, 3);
+         else y = mCommonBendAndPlinesPts[i].Y - Math.Round (mBendAllowance / 2, 3);
          mNew45DegVertices.Add (new BPoint (x, y));
       }
-
       return mNew45DegVertices;
    }
 
+   /// <summary>To locate the new plines for the bend process part.</summary>
+   /// <returns>It generates a list of pline.</returns>
    List<PLine> UpdatedPLines () {
       List<int> changingIndex = new ();
-      foreach (var a in mOrgBp.PLines) {
-         for (int i = 0; i < mCommonBendAndCurvePts.Count; i++) {
-            if (a.StartPoint == mCommonBendAndCurvePts[i]) changingIndex.Add (a.Index);
-            else if (a.EndPoint == mCommonBendAndCurvePts[i]) changingIndex.Add (a.Index);
+      List<List<BPoint>> orgPLines = new ();
+      foreach (var pLine in mOrgBp.PLines) {
+         for (int i = 0; i < mCommonBendAndPlinesPts.Count; i++) {
+            if (pLine.StartPoint == mCommonBendAndPlinesPts[i]) changingIndex.Add (pLine.Index);
+            else if (pLine.EndPoint == mCommonBendAndPlinesPts[i]) changingIndex.Add (pLine.Index);
          }
-         mOrgCurves.Add ([a.StartPoint, a.EndPoint]);
+         orgPLines.Add ([pLine.StartPoint, pLine.EndPoint]);
       }
-
-      int len = 0;
-      if (mNew45DegVertices.Count == 1) len = mOrgBp.PLines.Count + (mNew45DegVertices.Count * 2) - 1;
-      else len = mOrgBp.PLines.Count + (mNew45DegVertices.Count * 2) - 2;
-      for (int i = 0, j = 0, k = 0; mPLines.Count <= len; i++) {
-         if (k == 0 && i <= mOrgBp.PLines.Count - changingIndex.Count && !changingIndex.Contains (i)) {
-            mPLines.Add (mOrgBp.PLines[i]);
-         } else if (!changingIndex.Contains (i)) {
-            List<BPoint> temp = [.. mOrgCurves[i]];
-
-            mPLines.Add (new PLine (ECurve.Line, j++, temp[0], temp[1]));
+      int len = mOrgBp.PLines.Count + (mNew45DegVertices.Count * 2);
+      List<PLine> tempPLines = new ();
+      for (int i = 0, indexer = 0, loopBreaker = 0; tempPLines.Count < len; i++) {
+         if (loopBreaker == 0 && !changingIndex.Contains (i))
+            tempPLines.Add (mOrgBp.PLines[i]);
+         else if (!changingIndex.Contains (i)) {
+            List<BPoint> temp = [.. orgPLines[i]];
+            tempPLines.Add (new PLine (ECurve.Line, indexer++, temp[0], temp[1]));
          } else {
-            if (k == 0) {
-               j = i; k = 1;
+            if (loopBreaker == 0) {
+               indexer = i; loopBreaker = 1;
             }
-            List<BPoint> temp = [];
             int choose = 0;
-            foreach (var Point in mCommonBendAndCurvePts) {
-
+            List<BPoint> tempBPoint = new ();
+            foreach (var Point in mCommonBendAndPlinesPts) {
                if (mOrgBp.PLines[i].StartPoint == Point) {
-                  temp = GetPLines (mOrgBp.PLines[i], mOrgBp.PLines[i + 1], Point, i, mNew45DegVertices[choose]);
+                  tempBPoint = GetPLines (mOrgBp.PLines[i], mOrgBp.PLines[i + 1], Point, mNew45DegVertices[choose]);
                   break;
                } else if (mOrgBp.PLines[i].EndPoint == Point) {
-                  temp = GetPLines (mOrgBp.PLines[i], mOrgBp.PLines[i + 1], Point, i, mNew45DegVertices[choose]);
+                  tempBPoint = GetPLines (mOrgBp.PLines[i], mOrgBp.PLines[i + 1], Point, mNew45DegVertices[choose]);
                   break;
                }
                choose++;
             }
-
-            mPLines.Add (new PLine (ECurve.Line, j++, temp[0], temp[1]));
-            mPLines.Add (new PLine (ECurve.Line, j++, temp[1], temp[2]));
-            mPLines.Add (new PLine (ECurve.Line, j++, temp[2], temp[3]));
-            mPLines.Add (new PLine (ECurve.Line, j++, temp[3], temp[4]));
+            tempPLines.Add (new PLine (ECurve.Line, indexer++, tempBPoint[0], tempBPoint[1]));
+            tempPLines.Add (new PLine (ECurve.Line, indexer++, tempBPoint[1], tempBPoint[2]));
+            tempPLines.Add (new PLine (ECurve.Line, indexer++, tempBPoint[2], tempBPoint[3]));
+            tempPLines.Add (new PLine (ECurve.Line, indexer++, tempBPoint[3], tempBPoint[4]));
             i += 1;
          }
       }
-
-      return mPLines;
+      return tempPLines;
    }
 
-   List<BPoint> GetPLines (PLine first, PLine second, BPoint commonPoint, int index, BPoint newPoint) {
-      List<BPoint> tmp = [];
-      double px1 = first.StartPoint.X, px2 = second.EndPoint.X, py1 = first.StartPoint.Y,
-         py2 = second.EndPoint.Y, cpx1 = commonPoint.X, cpx2 = commonPoint.Y;
-      tmp.Add (first.StartPoint);
-      tmp.Add (GetBPoint (px1, py1, cpx1, cpx2, mBendAllowance));
-      tmp.Add (newPoint);
-      tmp.Add (GetBPoint (px2, py2, cpx1, cpx2, mBendAllowance));
-      tmp.Add (second.EndPoint);
-      return tmp;
+   /// <summary>To find a new pline for the part.</summary>
+   /// <param name="first">The present index pline for a particular part.</param>
+   /// <param name="second">The consecutive index ("first") pline for a particular part.</param>
+   /// <param name="cPoint">A point that is shared by both the lines and the bend lines.</param>
+   /// <param name="new45DegPoint">The common point is located at a 45-degree angle.</param>
+   /// <returns>It generates a list of bpoint.</returns>
+   List<BPoint> GetPLines (PLine first, PLine second, BPoint cPoint, BPoint new45DegPoint) {
+      List<BPoint> tempBPoint = [];
+      double px1 = Math.Round (first.StartPoint.X, 3), px2 = Math.Round (second.EndPoint.X, 3),
+         py1 = Math.Round (first.StartPoint.Y, 3), py2 = Math.Round (second.EndPoint.Y, 3),
+         cpx1 = Math.Round (cPoint.X, 3), cpx2 = Math.Round (cPoint.Y, 3);
+      tempBPoint.Add (first.StartPoint);
+      tempBPoint.Add (GetBPoint (px1, py1, cpx1, cpx2, mBendAllowance));
+      tempBPoint.Add (new45DegPoint);
+      tempBPoint.Add (GetBPoint (px2, py2, cpx1, cpx2, mBendAllowance));
+      tempBPoint.Add (second.EndPoint);
+      return tempBPoint;
    }
 
-   BPoint GetBPoint (double px, double py, double cx, double cy, double BA) {
-      if (cx - px == 0 && cy > py) return new BPoint (cx, (cy - BA / 2));
-      else if (cx - px == 0 && cy < py) return new BPoint (cx, cy + BA / 2);
-      else if (cy - py == 0 && cx > px) return new BPoint (cx - BA / 2, cy);
-      else if (cy - py == 0 && cx < px) return new BPoint (cx + BA / 2, cy);
+   /// <summary>To find a new bpoint for the pline.</summary>
+   /// <param name="px">The x-coordinate value for a pline, it can be either starting point or ending point.</param>
+   /// <param name="py">The y-coordinate value for a pline, it can be either starting point or ending point..</param>
+   /// <param name="cx">The x-coordinate value for a common point.</param>
+   /// <param name="cy">The y-coordinate value for a common point.</param>
+   /// <param name="BA">Bend allowance value for a material (1.0038).</param>
+   /// <returns>It returns a new bpoint.</returns>
+   static BPoint GetBPoint (double px, double py, double cx, double cy, double BA) {
+      if (cx == px && cy > py) return new BPoint (cx, (cy - BA / 2));
+      else if (cx == px && cy < py) return new BPoint (cx, cy + BA / 2);
+      else if (cy == py && cx > px) return new BPoint (cx - BA / 2, cy);
+      else if (cy == py && cx < px) return new BPoint (cx + BA / 2, cy);
       return new BPoint ();
    }
    #endregion
 
    #region Private Data ---------------------------------------------
-   Part mOrgBp = part, mAfterCrBp;
-   Dictionary<int, List<BPoint>> mCommonBendLinesIntersect = new Dictionary<int, List<BPoint>> (), mCommonBendPoints = new ();
-   List<BPoint> mCurvesStartPts = new (), mCurvesEndPts = new (), mBendLineStartpts = new (),
-      mBendLineEndPts = new (), mCommonBendAndCurvePts = new (),
-      mNewVertices = new (), mTempBPoints = new (), mNew45DegVertices = new ();
-   List<PLine> mPLines = new List<PLine> ();
-   Dictionary<BPoint, List<BPoint>> mUpdatedVertices = new Dictionary<BPoint, List<BPoint>> ();
+   Part mOrgBp = part;
+   List<BPoint> mCommonBendPoints = new (), mPlinesStartPts = new (), mPlinesEndPts = new (),
+      mCommonBendAndPlinesPts = new (), mNew45DegVertices = new ();
    double mBendAllowance;
-   List<List<BPoint>> mOrgCurves = new ();
    #endregion
 }
 #endregion

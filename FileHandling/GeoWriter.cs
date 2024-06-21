@@ -52,12 +52,12 @@ public class GeoWriter {
                         mIsLineNeeded = false;
                     } else if (line.Trim () == "#~371" && mBProfile.IsContourChanged) {    // Writes the vertices of bendlines with new indices for mapping them
                         int totalCount = mBProfile.BendLines.Count;
-                        if (blCount < totalCount) {
-                            var startPtIdx = mBProfile.BendLines[blCount].StartPoint.Index;               // #~371 section is written after each bendline's
-                            var endPtIdx = mBProfile.BendLines[blCount].EndPoint.Index;                   // #~37 section which holds info about the each bendline
+                        if (mBLCount < totalCount) {
+                            var startPtIdx = mBProfile.BendLines[mBLCount].StartPoint.Index;               // #~371 section is written after each bendline's
+                            var endPtIdx = mBProfile.BendLines[mBLCount].EndPoint.Index;                   // #~37 section which holds info about the each bendline
                             writer.WriteLine ("LIN{0}4 0{0}{1} {2}{0}|~", "\r\n", startPtIdx, endPtIdx);
                         }
-                        blCount++;
+                        mBLCount++;
                         mIsLineNeeded = false;
                         writer.WriteLine ("##~~\n#~BIEG_END");
                     } else mIsLineNeeded = true;
@@ -76,23 +76,10 @@ public class GeoWriter {
     #endregion
 
     #region Private -------------------------------------------------
-    int blCount;    // Holds the count of the bendlines written
+    int mBLCount;    // Holds the count of the bendlines written
     bool mIsLineNeeded = true;    // Set to false if the line in the imported file to be skipped
     readonly BendProcessedPart mBProfile;
     readonly string mFilename;    // Name of the imported file
-    #endregion
-
-    #region Commented -----------------------------------------------
-    //public (List<PLine>, List<BendLine>) GetChangedContour (List<PLine> curves, List<BendLine> bendLines) {
-    //    List<PLine> plines = []; List<BendLine> bl = []; int i;
-    //    for (i = 1; i <= curves.Count; i++)
-    //        plines.Add (new PLine (new BPoint (curves[i - 1].StartPoint.X, curves[i - 1].StartPoint.Y, i),
-    //            new BPoint (curves[i - 1].EndPoint.X, curves[i - 1].EndPoint.Y, i + 1)));
-    //    for (int j = 1; j <= bendLines.Count; j++)
-    //        bl.Add (new BendLine (new BPoint (bendLines[j - 1].StartPoint.X, bendLines[j - 1].StartPoint.Y, i + j + 2),
-    //            new BPoint (bendLines[j - 1].EndPoint.X, bendLines[j - 1].EndPoint.Y, i + j + 3)));
-    //    return (plines, bl);
-    //}
     #endregion
 }
 #endregion

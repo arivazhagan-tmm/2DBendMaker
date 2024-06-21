@@ -2,11 +2,11 @@
 
 #region class CornerRelief ------------------------------------------------------------------------
 public class CornerRelief (Part part) {
-
    #region Properties -----------------------------------------------
-   public static string ErrorMessage => "No bend line intersection exists";
+   public string ErrorMessage => "No bend line intersection exists";
    #endregion
 
+   #region Methods --------------------------------------------------
    /// <summary>Create a V-Notch corner relief for the intersection of the bend lines.</summary>
    /// <param name="part">The bend processed part.</param>
    /// <returns> Return values:
@@ -14,7 +14,6 @@ public class CornerRelief (Part part) {
    /// and after corner relief shown in the UI.
    /// false: It send an error message to the user.
    /// </returns>
-   #region Methods --------------------------------------------------
    public bool ApplyCornerRelief (out BendProcessedPart part) {
       if (mOrgBp.BendLines.Count >= 2) {
          for (int i = 0; i < mOrgBp.BendLines.Count - 1; i++) {

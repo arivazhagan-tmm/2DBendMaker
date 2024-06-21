@@ -31,9 +31,9 @@ public static class BendUtils {
 
    public static BPoint ToBPoint (this Point pt) => new (pt.X, pt.Y);
 
-   public static int[] GetCPIndices (this PLine refCurve, List<PLine> curves) {
-      var (start, end) = (refCurve.StartPoint, refCurve.EndPoint);
-      return curves.Where (c => c.Index != refCurve.Index && (c.HasVertex (start) || c.HasVertex (end))).Select (c => c.Index).ToArray ();
+   public static int[] GetCPIndices (this PLine refPline, List<PLine> plines) {
+      var (start, end) = (refPline.StartPoint, refPline.EndPoint);
+      return plines.Where (c => c.Index != refPline.Index && (c.HasVertex (start) || c.HasVertex (end))).Select (c => c.Index).ToArray ();
    }
 
    public static Bound Transform (this Bound b, Matrix xfm) {
@@ -43,19 +43,26 @@ public static class BendUtils {
       return new Bound (new BPoint (min.X, min.Y), new BPoint (max.X, max.Y));
    }
 
-   public static bool HasVertex (this PLine c, BPoint p) => c.StartPoint.Equals (p) || c.EndPoint.Equals (p);
+   public static bool HasVertex (this PLine p, BPoint pt) => p.StartPoint.Equals (pt) || p.EndPoint.Equals (pt);
 
-   public static double Area (List<BPoint> vertices) {
-      int n = vertices.Count; double area = 0;
+   public static double Area (List<BPoint> pts) {
+      int n = pts.Count; double area = 0;
       for (int i = 0; i < n - 1; i++)
-         area += vertices[i].X * vertices[i + 1].Y - vertices[i].Y * vertices[i + 1].X;
-      area += vertices[n - 1].X * vertices[0].Y - vertices[n - 1].Y * vertices[0].X;
+         area += pts[i].X * pts[i + 1].Y - pts[i].Y * pts[i + 1].X;
+      area += pts[n - 1].X * pts[0].Y - pts[n - 1].Y * pts[0].X;
       return Math.Abs (area) / 2;
    }
 
    public static string AddSpace (this string str) {
       var result = Regex.Split (str, @"(?=[A-Z])");
       return string.Join (" ", result);
+   }
+
+   public static double GetTraceLength (this IEnumerable<BPoint> pts) {
+      var tmp = pts.ToArray ();
+      var length = 0.0;
+      for (int i = 0, len = tmp.Length - 1; i < len; i++) length += tmp[i].DistanceTo (tmp[i + 1]);
+      return length;
    }
    #endregion
 

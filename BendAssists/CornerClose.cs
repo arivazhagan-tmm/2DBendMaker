@@ -3,127 +3,108 @@
 #region class CornerClose -------------------------------------------------------------------------
 public class CornerClose {
    #region Constructors ---------------------------------------------
-   public CornerClose () => (mIndex, mStepCurves, mEdgeCurves, mNewCurves, mStepStartPts, mStepEndPts) = (-1, [], [], [], [], []);
+   public CornerClose () => (mIndex, mStepLines, mEdgeLines, mNewLines, mStepStartPts, mStepEndPts) = (-1, [], [], [], [], []);
    #endregion
 
    #region Methods --------------------------------------------------
-   public BendProcessedPart ApplyCornerClosing (Part profile) {
-      var vertices = profile.Vertices; var curves = profile.PLines;
-      var halfBA = BendUtils.GetBendAllowance (90, 0.38, 2, 2) / 2;
-      var curveShift = halfBA - 2;
-      var halfBD = BendUtils.GetBendDeduction (90, 0.38, 2, 2) / 2;
-      var repeatedPoints = vertices.GroupBy (p => p).Where (p => p.Count () > 2).Select (g => g.Key).ToList ();
-      foreach (var curve in curves)
-         if (repeatedPoints.Contains (curve.StartPoint) || repeatedPoints.Contains (curve.EndPoint)) mStepCurves.Add (curve);
-         else mEdgeCurves.Add (curve);
-      mStepStartPts = GetStartPoints (mStepCurves, mStepStartPts);
-      mStepEndPts = GetEndPoints (mStepCurves, mStepEndPts);
-      for (int c = 0; c < curves.Count; c++) {
-         var curve = curves[c];
-         if (mEdgeCurves.Contains (curve)) {
-            PLine trimmedEdge;
-            if (mStepStartPts.Contains (curve.EndPoint) && mStepEndPts.Contains (curve.StartPoint)) {
-               if (curve.Orientation is ECurveOrientation.Horizontal) {
-                  trimmedEdge = (curve.StartPoint.Y < profile.Centroid.Y) ? curve.Trimmed (-halfBD, 0, -curveShift, 0)
-                                                                          : curve.Trimmed (halfBD, 0, curveShift, 0);
-                  trimmedEdge.Index = ++mIndex;
-                  mNewCurves.Add (trimmedEdge);
-               } else if (curve.Orientation is ECurveOrientation.Vertical) {
-                  trimmedEdge = (curve.StartPoint.X < profile.Centroid.X) ? curve.Trimmed (0, halfBD, 0, curveShift)
-                                                                          : curve.Trimmed (0, -halfBD, 0, -curveShift);
-                  trimmedEdge.Index = ++mIndex;
-                  mNewCurves.Add (trimmedEdge);
-               }
-            } else if (mStepStartPts.Contains (curve.EndPoint)) {
-               if (curve.Orientation is ECurveOrientation.Horizontal) {
-                  trimmedEdge = (curve.StartPoint.Y < profile.Centroid.Y) ? curve.Trimmed (0, 0, -curveShift, 0)
-                                                                          : curve.Trimmed (0, 0, curveShift, 0);
-                  trimmedEdge.Index = ++mIndex;
-                  mNewCurves.Add (trimmedEdge);
-               } else if (curve.Orientation is ECurveOrientation.Vertical) {
-                  trimmedEdge = (curve.StartPoint.X < profile.Centroid.X) ? curve.Trimmed (0, 0, 0, curveShift)
-                                                                          : curve.Trimmed (0, 0, 0, -curveShift);
-                  trimmedEdge.Index = ++mIndex;
-                  mNewCurves.Add (trimmedEdge);
-               }
-            } else if (mStepEndPts.Contains (curve.StartPoint)) {
-               if (curve.Orientation is ECurveOrientation.Horizontal) {
-                  trimmedEdge = (curve.StartPoint.Y < profile.Centroid.Y) ? curve.Trimmed (-halfBD, 0, 0, 0)
-                                                                          : curve.Trimmed (halfBD, 0, 0, 0);
-                  trimmedEdge.Index = ++mIndex;
-                  mNewCurves.Add (trimmedEdge);
-               } else if (curve.Orientation is ECurveOrientation.Vertical) {
-                  trimmedEdge = (curve.StartPoint.X < profile.Centroid.X) ? curve.Trimmed (0, halfBD, 0, 0)
-                                                                          : curve.Trimmed (0, -halfBD, 0, 0);
-                  trimmedEdge.Index = ++mIndex;
-                  mNewCurves.Add (trimmedEdge);
-               }
-            } else {
-               curve.Index = ++mIndex;
-               mNewCurves.Add (curve);
-            }
-         } else {
-            if (mStepCurves.IndexOf (curve) % 2 == 0) {
-               PLine translatedCurve;
-               if (curve.Orientation is ECurveOrientation.Horizontal) {
-                  translatedCurve = (curve.EndPoint.Y < profile.Centroid.Y) ? curve.Translated (0, curveShift) : curve.Translated (0, -curveShift);
-                  translatedCurve.Index = ++mIndex;
-                  mNewCurves.Add (translatedCurve);
-               } else if (curve.Orientation is ECurveOrientation.Vertical) {
-                  translatedCurve = (curve.EndPoint.X < profile.Centroid.X) ? curve.Translated (curveShift, 0) : curve.Translated (-curveShift, 0);
-                  translatedCurve.Index = ++mIndex;
-                  mNewCurves.Add (translatedCurve);
-               }
-            } else {
-               PLine trimmedCurve, extrudedCurve;
-               if (curve.Orientation is ECurveOrientation.Horizontal) {
-                  if (curve.StartPoint.X < profile.Centroid.X) {
-                     extrudedCurve = curve.Trimmed (-halfBA, 0, 0, 0).Translated (0, halfBD);
-                     trimmedCurve = curve.Trimmed (curveShift, 0, curve.Length - halfBA, 0);
-                  } else {
-                     extrudedCurve = curve.Trimmed (halfBA, 0, 0, 0).Translated (0, -halfBD);
-                     trimmedCurve = curve.Trimmed (-curveShift, 0, -(curve.Length - halfBA), 0);
+   /// <summary>Checks if a part is eligible for corner closing and outs the corner closed part</summary>
+   public bool ApplyCornerClosing (Part part, out BendProcessedPart cornerClosedPart) {
+      cornerClosedPart = new BendProcessedPart ();
+      var vertices = part.Vertices; var pLines = part.PLines;
+      var commonVertices = vertices.GroupBy (p => p).Where (p => p.Count () > 2).Select (g => g.Key).ToList (); // To find the intersecting points of bendlines with stepcut 
+      if (commonVertices.Count < 1) return false;
+      else {
+         var halfBA = BendUtils.GetBendAllowance (90, 0.38, 2, 2) / 2;
+         var lineShift = halfBA - 2;
+         var halfBD = BendUtils.GetBendDeduction (90, 0.38, 2, 2) / 2;
+         foreach (var pLine in pLines)
+            if (commonVertices.Contains (pLine.StartPoint) || commonVertices.Contains (pLine.EndPoint)) mStepLines.Add (pLine);
+            else mEdgeLines.Add (pLine);
+         foreach (var stepLine in mStepLines) {
+            mStepStartPts.Add (stepLine.StartPoint);
+            mStepEndPts.Add (stepLine.EndPoint);
+         }
+         for (int i = 0; i < pLines.Count; i++) {
+            var pLine = pLines[i];
+            if (mEdgeLines.Contains (pLine)) {
+               PLine trimmedEdge;
+               if (mStepStartPts.Contains (pLine.EndPoint) && mStepEndPts.Contains (pLine.StartPoint)) {
+                  if (pLine.Orientation is ECurveOrientation.Horizontal) {
+                     trimmedEdge = (pLine.StartPoint.Y < part.Centroid.Y) ? pLine.Trimmed (-halfBD, 0, -lineShift, 0)
+                                                                             : pLine.Trimmed (halfBD, 0, lineShift, 0);
+                     mNewLines.Insert (++mIndex, trimmedEdge);
+                  } else if (pLine.Orientation is ECurveOrientation.Vertical) {
+                     trimmedEdge = (pLine.StartPoint.X < part.Centroid.X) ? pLine.Trimmed (0, halfBD, 0, lineShift)
+                                                                             : pLine.Trimmed (0, -halfBD, 0, -lineShift);
+                     mNewLines.Insert (++mIndex, trimmedEdge);
                   }
-                  trimmedCurve.Index = ++mIndex;
-                  mNewCurves.Add (trimmedCurve);
-                  mNewCurves.Add (new PLine (ECurve.Line, ++mIndex, trimmedCurve.EndPoint, extrudedCurve.StartPoint));
-                  extrudedCurve.Index = ++mIndex;
-                  mNewCurves.Add (extrudedCurve);
-               } else if (curve.Orientation is ECurveOrientation.Vertical) {
-                  if (curve.StartPoint.Y < profile.Centroid.Y) {
-                     extrudedCurve = curve.Trimmed (0, -halfBA, 0, 0).Translated (-halfBD, 0);
-                     trimmedCurve = curve.Trimmed (0, curveShift, 0, curve.Length - halfBA);
-                  } else {
-                     extrudedCurve = curve.Trimmed (0, halfBA, 0, 0).Translated (halfBD, 0);
-                     trimmedCurve = curve.Trimmed (0, -curveShift, 0, -(curve.Length - halfBA));
+               } else if (mStepStartPts.Contains (pLine.EndPoint)) {
+                  if (pLine.Orientation is ECurveOrientation.Horizontal) {
+                     trimmedEdge = (pLine.StartPoint.Y < part.Centroid.Y) ? pLine.Trimmed (0, 0, -lineShift, 0)
+                                                                             : pLine.Trimmed (0, 0, lineShift, 0);
+                     mNewLines.Insert (++mIndex, trimmedEdge);
+                  } else if (pLine.Orientation is ECurveOrientation.Vertical) {
+                     trimmedEdge = (pLine.StartPoint.X < part.Centroid.X) ? pLine.Trimmed (0, 0, 0, lineShift)
+                                                                             : pLine.Trimmed (0, 0, 0, -lineShift);
+                     mNewLines.Insert (++mIndex, trimmedEdge);
                   }
-                  trimmedCurve.Index = ++mIndex;
-                  mNewCurves.Add (trimmedCurve);
-                  mNewCurves.Add (new PLine (ECurve.Line, ++mIndex, trimmedCurve.EndPoint, extrudedCurve.StartPoint));
-                  extrudedCurve.Index = ++mIndex;
-                  mNewCurves.Add (extrudedCurve);
+               } else if (mStepEndPts.Contains (pLine.StartPoint)) {
+                  if (pLine.Orientation is ECurveOrientation.Horizontal) {
+                     trimmedEdge = (pLine.StartPoint.Y < part.Centroid.Y) ? pLine.Trimmed (-halfBD, 0, 0, 0)
+                                                                             : pLine.Trimmed (halfBD, 0, 0, 0);
+                     mNewLines.Insert (++mIndex, trimmedEdge);
+                  } else if (pLine.Orientation is ECurveOrientation.Vertical) {
+                     trimmedEdge = (pLine.StartPoint.X < part.Centroid.X) ? pLine.Trimmed (0, halfBD, 0, 0)
+                                                                             : pLine.Trimmed (0, -halfBD, 0, 0);
+                     mNewLines.Insert (++mIndex, trimmedEdge);
+                  }
+               } else mNewLines.Insert (++mIndex, pLine);
+            } else {
+               if (mStepLines.IndexOf (pLine) % 2 == 0) {
+                  PLine translatedLine;
+                  if (pLine.Orientation is ECurveOrientation.Horizontal) {
+                     translatedLine = (pLine.EndPoint.Y < part.Centroid.Y) ? pLine.Translated (0, lineShift) : pLine.Translated (0, -lineShift);
+                     mNewLines.Insert (++mIndex, translatedLine);
+                  } else if (pLine.Orientation is ECurveOrientation.Vertical) {
+                     translatedLine = (pLine.EndPoint.X < part.Centroid.X) ? pLine.Translated (lineShift, 0) : pLine.Translated (-lineShift, 0);
+                     mNewLines.Insert (++mIndex, translatedLine);
+                  }
+               } else {
+                  PLine trimmedLine, extrudedLine;
+                  if (pLine.Orientation is ECurveOrientation.Horizontal) {
+                     if (pLine.StartPoint.X < part.Centroid.X) {
+                        extrudedLine = pLine.Trimmed (-halfBA, 0, 0, 0).Translated (0, halfBD);
+                        trimmedLine = pLine.Trimmed (lineShift, 0, pLine.Length - halfBA, 0);
+                     } else {
+                        extrudedLine = pLine.Trimmed (halfBA, 0, 0, 0).Translated (0, -halfBD);
+                        trimmedLine = pLine.Trimmed (-lineShift, 0, -(pLine.Length - halfBA), 0);
+                     }
+                     mNewLines.Insert (++mIndex, trimmedLine);
+                     mNewLines.Add (new PLine (ECurve.Line, ++mIndex, trimmedLine.EndPoint, extrudedLine.StartPoint));
+                     mNewLines.Insert (++mIndex, extrudedLine);
+                  } else if (pLine.Orientation is ECurveOrientation.Vertical) {
+                     if (pLine.StartPoint.Y < part.Centroid.Y) {
+                        extrudedLine = pLine.Trimmed (0, -halfBA, 0, 0).Translated (-halfBD, 0);
+                        trimmedLine = pLine.Trimmed (0, lineShift, 0, pLine.Length - halfBA);
+                     } else {
+                        extrudedLine = pLine.Trimmed (0, halfBA, 0, 0).Translated (halfBD, 0);
+                        trimmedLine = pLine.Trimmed (0, -lineShift, 0, -(pLine.Length - halfBA));
+                     }
+                     mNewLines.Insert (++mIndex, trimmedLine);
+                     mNewLines.Add (new PLine (ECurve.Line, ++mIndex, trimmedLine.EndPoint, extrudedLine.StartPoint));
+                     mNewLines.Insert (++mIndex, extrudedLine);
+                  }
                }
             }
          }
+         cornerClosedPart = new BendProcessedPart (EBDAlgorithm.Unknown, mNewLines, part.BendLines, true);
+         return true;
       }
-      return new BendProcessedPart (EBDAlgorithm.Unknown, mNewCurves, profile.BendLines, true);
-   }
-   #endregion
-
-   #region Implementation -------------------------------------------
-   List<BPoint> GetStartPoints (List<PLine> curves, List<BPoint> bPoints) {
-      foreach (PLine curve in curves) bPoints.Add (curve.StartPoint);
-      return bPoints;
-   }
-
-   List<BPoint> GetEndPoints (List<PLine> curves, List<BPoint> bPoints) {
-      foreach (PLine curve in curves) bPoints.Add (curve.EndPoint);
-      return bPoints;
    }
    #endregion
 
    #region Private Data ---------------------------------------------
-   List<PLine> mStepCurves, mEdgeCurves, mNewCurves;
+   List<PLine> mStepLines, mEdgeLines, mNewLines;
    List<BPoint> mStepStartPts, mStepEndPts;
    int mIndex;
    #endregion

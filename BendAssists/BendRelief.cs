@@ -2,24 +2,28 @@
 
 #region class BendRelief --------------------------------------------------------------------------
 public class BendRelief {
-    #region Constructors ---------------------------------------------
+    #region Constructors --------------------------------------------
     public BendRelief () => mPLines = [];
     #endregion
 
-    #region Methods --------------------------------------------------
+    #region Methods -------------------------------------------------
+    /// <summary>Adds bend relief to the profile</summary>
+    /// Takes the profile and finds bend relief points
+    /// creates new lines based on the bend relief points
+    /// returns the bend processed part based on the new list of lines
     public BendProcessedPart ApplyBendRelief (Part profile) {
         mPLines.Clear ();
-        foreach (var curve in profile.PLines) mPLines.Add (curve);
-        var hCurves = mPLines.Where (IsHorizontal).ToList ();
-        var vCurves = mPLines.Where (IsVertical).ToList ();
+        foreach (var line in profile.PLines) mPLines.Add (line);
+        var hLines = mPLines.Where (IsHorizontal).ToList ();
+        var vLines = mPLines.Where (IsVertical).ToList ();
 
         if (profile.BendLines.Count () != 0)
             foreach (var bLine in profile.BendLines) {
                 // Intersected Line - Line intersected by the bendline
-                var ILine = (IsHorizontal (bLine) ? vCurves : hCurves).Where (x => IsIntersecting (x, bLine)).First ();
+                var ILine = (IsHorizontal (bLine) ? vLines : hLines).Where (x => IsIntersecting (x, bLine)).First ();
 
                 // Nearest line from the bendline
-                var NLine = GetNearestParallelCurve (IsHorizontal (bLine) ? hCurves : vCurves, bLine);
+                var NLine = GetNearestParallelLine (IsHorizontal (bLine) ? hLines : vLines, bLine);
 
                 // Non Intersecting Point of the bendline
                 var NIPoint = IsHorizontal (bLine) ? (EQ (bLine.StartPoint.X, ILine.StartPoint.X) ? bLine.EndPoint : bLine.StartPoint)
@@ -29,14 +33,16 @@ public class BendRelief {
                 var IPoint = EQ (bLine.StartPoint, NIPoint) ? bLine.EndPoint : bLine.StartPoint;
 
                 // Check if the profile has a stepcut
-                mHasStepCut = IsHorizontal (bLine) ? vCurves.Where (x => EQ (x.StartPoint.X, NIPoint.X) || EQ (x.EndPoint.X, NIPoint.X)).Count () == 1
-                                                      : hCurves.Where (x => EQ (x.StartPoint.Y, NIPoint.Y) || EQ (x.EndPoint.Y, NIPoint.Y)).Count () == 1;
+                mHasStepCut = IsHorizontal (bLine) ? vLines.Where (x => EQ (x.StartPoint.X, NIPoint.X) || EQ (x.EndPoint.X, NIPoint.X)).Count () == 1
+                                                      : hLines.Where (x => EQ (x.StartPoint.Y, NIPoint.Y) || EQ (x.EndPoint.Y, NIPoint.Y)).Count () == 1;
                 AddBendReliefPoints (bLine, ILine, NLine, IPoint, NIPoint, profile.Vertices.Centroid (), profile.Thickness);
             }
         return new BendProcessedPart (EBDAlgorithm.EquallyDistributed, GetOrderedLines (mPLines), profile.BendLines, true);
     }
+    #endregion
 
-    // Get bend relief points and create 
+    #region Implementation ------------------------------------------
+    // Get bend relief points and create new lines
     void AddBendReliefPoints (BendLine bLine, PLine ILine, PLine NLine, BPoint IPoint, BPoint NIPoint, BPoint centre, double thickness) {
         var isHorizontal = IsHorizontal (bLine);
 
@@ -45,7 +51,7 @@ public class BendRelief {
                brHeight = BendUtils.GetBendAllowance (90, 0.38, thickness, 2) / 2,
                brWidth = thickness / 2;
 
-        BPoint p1, p2, p3, p4, p5, p6;
+        BPoint p1, p2, p3, p4, p5, p6; // Bend relief points
         p1 = new (
             NIPoint.X + (isHorizontal ? 0 : (NIPoint.X < centre.X ? -1 : 1) * offset),
             NIPoint.Y + (isHorizontal ? ((NIPoint.Y > centre.Y ? 1 : -1) * offset) : 0)
@@ -87,15 +93,16 @@ public class BendRelief {
                               : (EQ (line.StartPoint.Y, bLine.StartPoint.Y) || EQ (line.StartPoint.Y, bLine.EndPoint.Y));
 
     // Gets the nearest parallel curve to the bendline
-    PLine GetNearestParallelCurve (List<PLine> curves, BendLine bLine) =>
-        curves.OrderBy (curve => GetDistanceToLine (curve, bLine)).FirstOrDefault ();
+    PLine GetNearestParallelLine (List<PLine> lines, BendLine bLine) =>
+        lines.OrderBy (line => GetDistanceToLine (line, bLine)).FirstOrDefault ();
 
     // Get the distance of a line from the bendline
     double GetDistanceToLine (PLine line, BendLine bLine) =>
         IsHorizontal (bLine) ? Math.Abs (line.StartPoint.Y - bLine.StartPoint.Y)
                              : Math.Abs (line.StartPoint.X - bLine.StartPoint.X);
 
-    public List<PLine> GetOrderedLines (List<PLine> pLines) {
+    // Get ordered lines 
+    List<PLine> GetOrderedLines (List<PLine> pLines) {
         List<PLine> orderedPLines = new () { pLines[0] };
         pLines.RemoveAt (0);
         while (pLines.Count > 0) {

@@ -1,19 +1,13 @@
 ﻿namespace BendMaker;
 
-#region class BProfileMaker -----------------------------------------------------------------------
+#region class BendDeduction -----------------------------------------------------------------------
 public class BendDeduction {
    #region Constructors ---------------------------------------------
-   public BendDeduction (Part profile, EBDAlgorithm algorithm) => (mPart, mAlgorithm) = (profile, algorithm);
-
-   public BendDeduction () { }
-   #endregion
-
-   #region Properties -----------------------------------------------
+   public BendDeduction (Part part, EBDAlgorithm algorithm) => (mPart, mAlgorithm) = (part, algorithm);
    #endregion
 
    #region Methods --------------------------------------------------
-   public BendProcessedPart ApplyBendDeduction (Part part, EBDAlgorithm algorithm) {
-      (mPart, mAlgorithm) = (part, algorithm);
+   public bool ApplyBendDeduction (out BendProcessedPart part) {
       var totalBD = 0.0;
       int verBLCount = 0, horBLCount = 0;
       List<BendLine> newBendLines = [];
@@ -101,8 +95,8 @@ public class BendDeduction {
             }
          }
       }
-      mProcessedPart = new BendProcessedPart (mAlgorithm, newPlines, newBendLines);
-      return mProcessedPart;
+      part = new BendProcessedPart (newPlines, newBendLines);
+      return true;
    }
    #endregion
 
@@ -147,7 +141,6 @@ public class BendDeduction {
 
    #region Private Data ---------------------------------------------
    Part mPart;
-   BendProcessedPart mProcessedPart;
    EBDAlgorithm mAlgorithm;
    #endregion
 }

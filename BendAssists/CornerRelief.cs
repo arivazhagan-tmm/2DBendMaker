@@ -15,20 +15,20 @@ public class CornerRelief (Part part) {
    /// false: It send an error message to the user.
    /// </returns>
    public bool ApplyCornerRelief (out BendProcessedPart part) {
-      if (mOrgBp.BendLines.Count >= 2) {
-         for (int i = 0; i < mOrgBp.BendLines.Count - 1; i++) {
-            var start = GetCommonBendPoints (mOrgBp.BendLines[i].StartPoint, i);
+      if (mPart.BendLines.Count >= 2) {
+         for (int i = 0; i < mPart.BendLines.Count - 1; i++) {
+            var start = GetCommonBendPoints (mPart.BendLines[i].StartPoint, i);
             if (start.repeatedPoints > 0) mCommonBendPoints.Add (start.cPoint);
-            var end = GetCommonBendPoints (mOrgBp.BendLines[i].EndPoint, i);
+            var end = GetCommonBendPoints (mPart.BendLines[i].EndPoint, i);
             if (end.repeatedPoints > 0) mCommonBendPoints.Add (end.cPoint);
          }
       }
       if (mCommonBendPoints.Count == 0) {
-         part = new BendProcessedPart (EBDAlgorithm.PartiallyDistributed, mOrgBp.PLines, mOrgBp.BendLines);
+         part = new BendProcessedPart (mPart.PLines, mPart.BendLines);
          return false;
       }
-      if (mOrgBp.PLines.Count > 0) {
-         foreach (var point in mOrgBp.PLines) {
+      if (mPart.PLines.Count > 0) {
+         foreach (var point in mPart.PLines) {
             mPlinesStartPts.Add (point.StartPoint);
             mPlinesEndPts.Add (point.EndPoint);
          }
@@ -40,7 +40,7 @@ public class CornerRelief (Part part) {
          }
       }
       UpdatedVertices ();
-      part = new BendProcessedPart (EBDAlgorithm.PartiallyDistributed, UpdatedPLines (), mOrgBp.BendLines);
+      part = new BendProcessedPart (UpdatedPLines (), mPart.BendLines);
       return true;
    }
 
@@ -53,10 +53,10 @@ public class CornerRelief (Part part) {
    ///  index value in a list. Here, 'x' is a natural number.
    /// </returns>
    (int repeatedPoints, BPoint cPoint) GetCommonBendPoints (BPoint point, int index) {
-      List<BPoint> tempBPoint = new ();
-      while (++index < mOrgBp.BendLines.Count) {
-         if (point == mOrgBp.BendLines[index].StartPoint) tempBPoint.Add (point);
-         if (point == mOrgBp.BendLines[index].EndPoint) tempBPoint.Add (point);
+      List<BPoint> tempBPoint = [];
+      while (++index < mPart.BendLines.Count) {
+         if (point == mPart.BendLines[index].StartPoint) tempBPoint.Add (point);
+         if (point == mPart.BendLines[index].EndPoint) tempBPoint.Add (point);
       }
       if (tempBPoint.Count == 0) return (0, new BPoint ());
       return (tempBPoint.Count, tempBPoint[0]);
@@ -68,11 +68,11 @@ public class CornerRelief (Part part) {
    /// and the plines.</summary>
    /// <returns>It generates a list of bpoint.</returns>
    List<BPoint> UpdatedVertices () {
-      Dictionary<BPoint, List<BPoint>> commonPointAndBendLines = new ();
+      Dictionary<BPoint, List<BPoint>> commonPointAndBendLines = [];
       mBendAllowance = Math.Round (BendUtils.GetBendAllowance (90, 0.38, 2, 2), 3); // Material 1.0038
       for (int i = 0; i < mCommonBendAndPlinesPts.Count; i++) {
-         List<BPoint> tempBPoint = new ();
-         foreach (var pLine in mOrgBp.BendLines) {
+         List<BPoint> tempBPoint = [];
+         foreach (var pLine in mPart.BendLines) {
             if (pLine.StartPoint == mCommonBendAndPlinesPts[i]) tempBPoint.Add (pLine.EndPoint);
             if (pLine.EndPoint == mCommonBendAndPlinesPts[i]) tempBPoint.Add (pLine.StartPoint);
          }
@@ -95,20 +95,20 @@ public class CornerRelief (Part part) {
    /// <summary>To locate the new plines for the bend process part.</summary>
    /// <returns>It generates a list of pline.</returns>
    List<PLine> UpdatedPLines () {
-      List<int> changingIndex = new ();
-      List<List<BPoint>> orgPLines = new ();
-      foreach (var pLine in mOrgBp.PLines) {
+      List<int> changingIndex = [];
+      List<List<BPoint>> orgPLines = [];
+      foreach (var pLine in mPart.PLines) {
          for (int i = 0; i < mCommonBendAndPlinesPts.Count; i++) {
             if (pLine.StartPoint == mCommonBendAndPlinesPts[i]) changingIndex.Add (pLine.Index);
             else if (pLine.EndPoint == mCommonBendAndPlinesPts[i]) changingIndex.Add (pLine.Index);
          }
          orgPLines.Add ([pLine.StartPoint, pLine.EndPoint]);
       }
-      int len = mOrgBp.PLines.Count + (mNew45DegVertices.Count * 2);
-      List<PLine> tempPLines = new ();
+      int len = mPart.PLines.Count + (mNew45DegVertices.Count * 2);
+      List<PLine> tempPLines = [];
       for (int i = 0, indexer = 0, loopBreaker = 0; tempPLines.Count < len; i++) {
          if (loopBreaker == 0 && !changingIndex.Contains (i))
-            tempPLines.Add (mOrgBp.PLines[i]);
+            tempPLines.Add (mPart.PLines[i]);
          else if (!changingIndex.Contains (i)) {
             List<BPoint> temp = [.. orgPLines[i]];
             tempPLines.Add (new PLine (ECurve.Line, indexer++, temp[0], temp[1]));
@@ -117,13 +117,13 @@ public class CornerRelief (Part part) {
                indexer = i; loopBreaker = 1;
             }
             int choose = 0;
-            List<BPoint> tempBPoint = new ();
+            List<BPoint> tempBPoint = [];
             foreach (var Point in mCommonBendAndPlinesPts) {
-               if (mOrgBp.PLines[i].StartPoint == Point) {
-                  tempBPoint = GetPLines (mOrgBp.PLines[i], mOrgBp.PLines[i + 1], Point, mNew45DegVertices[choose]);
+               if (mPart.PLines[i].StartPoint == Point) {
+                  tempBPoint = GetPLines (mPart.PLines[i], mPart.PLines[i + 1], Point, mNew45DegVertices[choose]);
                   break;
-               } else if (mOrgBp.PLines[i].EndPoint == Point) {
-                  tempBPoint = GetPLines (mOrgBp.PLines[i], mOrgBp.PLines[i + 1], Point, mNew45DegVertices[choose]);
+               } else if (mPart.PLines[i].EndPoint == Point) {
+                  tempBPoint = GetPLines (mPart.PLines[i], mPart.PLines[i + 1], Point, mNew45DegVertices[choose]);
                   break;
                }
                choose++;
@@ -174,9 +174,12 @@ public class CornerRelief (Part part) {
    #endregion
 
    #region Private Data ---------------------------------------------
-   Part mOrgBp = part;
-   List<BPoint> mCommonBendPoints = new (), mPlinesStartPts = new (), mPlinesEndPts = new (),
-      mCommonBendAndPlinesPts = new (), mNew45DegVertices = new ();
+   Part mPart = part;
+   List<BPoint> mCommonBendPoints = [], 
+                mPlinesStartPts = [], 
+                mPlinesEndPts = [],
+                mCommonBendAndPlinesPts = [], 
+                mNew45DegVertices = [];
    double mBendAllowance;
    #endregion
 }

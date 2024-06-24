@@ -9,8 +9,8 @@ public class GeoWriter {
     #endregion
 
     #region Methods -------------------------------------------------
-    /// <summary>Writes a new geo file</summary>
-    public void Save (string fileName) {
+    /// <summary>Writes a new geo file at the given location</summary>
+    public void WriteTo (string fileName) {
         var lines = File.ReadAllLines (mFilename).ToList (); // Reads the imported file
         using StreamWriter writer = new (fileName);
         foreach (string line in lines) {
@@ -45,7 +45,7 @@ public class GeoWriter {
                 case "#~11" or "#~30" or "#~37" or "#~331" or "#~371" or "#~END" or "#~EOF":
                     writer.WriteLine (line);
                     if (line.Trim () == "#~331" && mBProfile.IsContourChanged) {    // Writes the vertices of contour with new indices for mapping them
-                        foreach (var curve in mBProfile.Curves) {
+                        foreach (var curve in mBProfile.PLines) {
                             writer.WriteLine ("LIN{0}1 0{0}{1} {2}{0}|~", "\r\n", curve.StartPoint.Index, curve.EndPoint.Index);
                         }
                         writer.WriteLine ("##~~\n#~KONT_END");
@@ -72,7 +72,7 @@ public class GeoWriter {
     public string BoundMin => $"{mBProfile.Bound.MinX:F9} {mBProfile.Bound.MinY:F9} 0.000000000";
     public string BoundMax => $"{mBProfile.Bound.MaxX:F9} {mBProfile.Bound.MaxY:F9} 0.000000000";
     public string Centriod => $"{mBProfile.Centroid.X:F9} {mBProfile.Centroid.Y:F9} 0.000000000";
-    public string Area => $"{BendUtils.Area (mBProfile.Curves.OrderBy (x => x.Index).Select (x => x.StartPoint).ToList ()):F9}";
+    public string Area => $"{BendUtils.Area (mBProfile.PLines.OrderBy (x => x.Index).Select (x => x.StartPoint).ToList ()):F9}";
     #endregion
 
     #region Private -------------------------------------------------

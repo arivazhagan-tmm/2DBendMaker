@@ -97,7 +97,7 @@ public class CornerClose {
                }
             }
          }
-         cornerClosedPart = new BendProcessedPart (EBDAlgorithm.Unknown, mNewLines, part.BendLines, true);
+         cornerClosedPart = new BendProcessedPart (mNewLines, part.BendLines, true);
          return true;
       }
    }

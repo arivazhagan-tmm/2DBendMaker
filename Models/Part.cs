@@ -1,10 +1,10 @@
 ﻿namespace BendMaker;
 
-#region struct Profile ----------------------------------------------------------------------------
+#region struct Part -------------------------------------------------------------------------------
 public struct Part {
     #region Constructors ---------------------------------------------
     public Part (List<PLine> curves, List<BendLine> bendLines,string materialType, double thickness) {
-        mBendLines = bendLines.OrderBy (bl => bl.StartPoint.Y).ThenBy (bl => bl.StartPoint.X).ToList ();
+        mBendLines = [.. bendLines.OrderBy (bl => bl.StartPoint.Y).ThenBy (bl => bl.StartPoint.X)];
         (mPLines, mVertices) = (curves, []);
         foreach (var c in mPLines) mVertices.Add (c.StartPoint);
         mCentroid = BendUtils.Centroid (mVertices);
